@@ -1,0 +1,6 @@
+{
+  "name": "خط نگار",
+  "description": "سامانه تخصصی مهندسی پرامپت تایپوگرافی و خوشنویسی اصیل فارسی (خط‌نگار) با مدیریت پرامپت‌های مادر و پنل مدیریت کامل",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

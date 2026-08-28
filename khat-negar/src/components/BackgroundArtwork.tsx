@@ -9,11 +9,11 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
   return (
     <div
       className={`fixed inset-0 pointer-events-none overflow-hidden select-none z-0 ${className}`}
-      style={{ contain: 'strict', isolation: 'isolate' }}
+      style={{ contain: 'paint layout size', isolation: 'isolate', willChange: 'transform' }}
       aria-hidden="true"
     >
       {/* 1. Ultra-Smooth Hardware-Accelerated Ambient Radial Orbs (GPU Layer, 0% JS CPU) */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ contain: 'paint' }}>
         {/* Top-Right Warm Crimson & Coral Ambient Gradient */}
         <div
           className="absolute -top-36 -right-20 w-[42rem] h-[42rem] rounded-full gpu-orb-1"
@@ -22,7 +22,9 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
               variant === 'admin'
                 ? 'radial-gradient(circle at 40% 40%, rgba(245, 89, 81, 0.09) 0%, rgba(251, 191, 36, 0.04) 45%, transparent 70%)'
                 : 'radial-gradient(circle at 40% 40%, rgba(245, 89, 81, 0.16) 0%, rgba(251, 191, 36, 0.07) 45%, transparent 70%)',
-            transform: 'translateZ(0)'
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform, opacity',
+            backfaceVisibility: 'hidden'
           }}
         />
 
@@ -34,7 +36,9 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
               variant === 'admin'
                 ? 'radial-gradient(circle at 50% 50%, rgba(54, 29, 50, 0.08) 0%, rgba(84, 60, 82, 0.04) 50%, transparent 70%)'
                 : 'radial-gradient(circle at 50% 50%, rgba(54, 29, 50, 0.14) 0%, rgba(84, 60, 82, 0.07) 50%, transparent 70%)',
-            transform: 'translateZ(0)'
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform, opacity',
+            backfaceVisibility: 'hidden'
           }}
         />
 
@@ -45,7 +49,9 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
             style={{
               background: 'radial-gradient(circle, rgba(245, 89, 81, 0.07) 0%, rgba(251, 191, 36, 0.04) 40%, transparent 70%)',
               animationDelay: '-4s',
-              transform: 'translateZ(0)'
+              transform: 'translate3d(0, 0, 0)',
+              willChange: 'transform, opacity',
+              backfaceVisibility: 'hidden'
             }}
           />
         )}
@@ -54,7 +60,12 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
       {/* 2. Living Persian Girih Geometric Pattern (گره چینی یکپارچه و بهینه‌سازی شده با تراکم زیباتر) */}
       <div
         className="absolute inset-0 w-full h-full gpu-girih pointer-events-none"
-        style={{ transform: 'translateZ(0)' }}
+        style={{
+          transform: 'translate3d(0, 0, 0)',
+          willChange: 'opacity',
+          backfaceVisibility: 'hidden',
+          contain: 'strict'
+        }}
       >
         <svg
           className="w-full h-full text-[#361D32] dark:text-[#EDD2CB]"
@@ -119,11 +130,11 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
       </div>
 
       {/* 3. Living Persian Calligraphic Nastaliq Sweeps (حرکت روان خطوط نستعلیق و نقوش ایرانی) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ contain: 'paint' }}>
         {/* Calligraphic Sweep 1 - Top Right */}
         <div
           className="absolute -top-12 -right-16 w-80 h-80 sm:w-[32rem] sm:h-[32rem] text-[#F55951] gpu-calligraphy-1"
-          style={{ transform: 'translateZ(0)' }}
+          style={{ transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
         >
           <svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
             <path
@@ -139,7 +150,7 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
         {/* Calligraphic Sweep 2 - Bottom Left */}
         <div
           className="absolute -bottom-16 -left-16 w-80 h-80 sm:w-[34rem] sm:h-[34rem] text-[#543C52] dark:text-[#EDD2CB] gpu-calligraphy-2"
-          style={{ transform: 'translateZ(0)' }}
+          style={{ transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
         >
           <svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
             <path
@@ -159,30 +170,33 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
         {/* Floating Calligraphic Dots & Rhombus Diamonds (نقاط شناور خوشنویسی با تحرک زنده) */}
         <div
           className="absolute top-1/5 right-1/5 w-3.5 h-3.5 rounded-xs bg-[#F55951] transform rotate-45 gpu-particle shadow-xs"
-          style={{ transform: 'translateZ(0)' }}
+          style={{ transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
         />
         <div
           className="absolute top-2/5 left-1/6 w-3 h-3 rounded-xs bg-amber-500 transform rotate-45 gpu-particle shadow-xs"
-          style={{ animationDelay: '-2.5s', transform: 'translateZ(0)' }}
+          style={{ animationDelay: '-2.5s', transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
         />
         <div
           className="absolute bottom-1/3 right-1/4 w-2.5 h-2.5 rounded-xs bg-[#543C52] dark:bg-[#EDD2CB] transform rotate-45 gpu-particle"
-          style={{ animationDelay: '-4s', transform: 'translateZ(0)' }}
+          style={{ animationDelay: '-4s', transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
         />
         <div
           className="absolute bottom-1/5 left-1/3 w-3 h-3 rounded-xs bg-[#F55951] transform rotate-45 gpu-particle"
-          style={{ animationDelay: '-1.8s', transform: 'translateZ(0)' }}
+          style={{ animationDelay: '-1.8s', transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
         />
         <div
           className="absolute top-2/3 right-1/8 w-2 h-2 rounded-xs bg-amber-400 transform rotate-45 gpu-particle"
-          style={{ animationDelay: '-3.2s', transform: 'translateZ(0)' }}
+          style={{ animationDelay: '-3.2s', transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
         />
       </div>
 
       {/* 4. Elegant Persian Toranj Border Details (ترنج و شمسه گوشه‌های صفحه) */}
       {variant !== 'admin' && (
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-2 right-2 w-40 h-40 opacity-16 dark:opacity-22 text-[#F55951] gpu-toranj">
+        <div className="absolute inset-0 pointer-events-none" style={{ contain: 'paint' }}>
+          <div
+            className="absolute top-2 right-2 w-40 h-40 opacity-16 dark:opacity-22 text-[#F55951] gpu-toranj"
+            style={{ transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
+          >
             <svg viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
               <circle cx="160" cy="0" r="140" stroke="currentColor" strokeWidth="1.2" strokeDasharray="5 3" />
               <circle cx="160" cy="0" r="100" stroke="currentColor" strokeWidth="0.9" />
@@ -192,7 +206,10 @@ export function BackgroundArtwork({ variant = 'full', className = '' }: Backgrou
             </svg>
           </div>
 
-          <div className="absolute bottom-2 left-2 w-40 h-40 opacity-16 dark:opacity-22 text-[#543C52] dark:text-[#EDD2CB] gpu-toranj" style={{ animationDelay: '-4.5s' }}>
+          <div
+            className="absolute bottom-2 left-2 w-40 h-40 opacity-16 dark:opacity-22 text-[#543C52] dark:text-[#EDD2CB] gpu-toranj"
+            style={{ animationDelay: '-4.5s', transform: 'translate3d(0, 0, 0)', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
+          >
             <svg viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
               <circle cx="0" cy="160" r="140" stroke="currentColor" strokeWidth="1.2" strokeDasharray="5 3" />
               <circle cx="0" cy="160" r="100" stroke="currentColor" strokeWidth="0.9" />

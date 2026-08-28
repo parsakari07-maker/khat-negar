@@ -47,7 +47,7 @@ export function AuthScreen() {
     setIsShaking(true);
     setTimeout(() => {
       setIsShaking(false);
-    }, 650);
+    }, 1000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,19 +94,19 @@ export function AuthScreen() {
         initial={{ opacity: 0, scale: 0.96, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className={`w-full max-w-md bg-[var(--bg-surface)]/95 backdrop-blur-xl border rounded-3xl shadow-2xl p-6 sm:p-8 relative z-10 overflow-hidden transition-colors ${
+        className={`w-full max-w-md bg-[var(--bg-surface)] border rounded-3xl shadow-2xl p-6 sm:p-8 relative z-10 overflow-hidden ${
           isShaking
             ? 'border-red-500 shadow-red-500/30 animate-error-shake ring-4 ring-red-500/20'
             : 'border-[var(--border-color)]'
         }`}
       >
-        {/* Animated Big Rejection Cross Indicator Overlay on Wrong Password */}
+        {/* Animated Big Rejection Cross Indicator Overlay on Wrong Password (1 Second Duration) */}
         {isShaking && (
-          <div className="absolute inset-0 z-30 bg-red-950/25 backdrop-blur-xs flex flex-col items-center justify-center pointer-events-none animate-error-cross">
-            <div className="w-20 h-20 rounded-full bg-red-500/90 text-white flex items-center justify-center shadow-2xl shadow-red-500/50">
-              <XCircle className="w-14 h-14 animate-pulse stroke-[2.5]" />
+          <div className="absolute inset-0 z-30 bg-red-950/25 flex flex-col items-center justify-center pointer-events-none animate-error-cross">
+            <div className="w-20 h-20 rounded-full bg-red-500/95 text-white flex items-center justify-center shadow-2xl shadow-red-500/50">
+              <XCircle className="w-14 h-14 stroke-[2.5]" />
             </div>
-            <span className="mt-3 text-sm font-black text-white px-3 py-1 rounded-xl bg-red-600/90 shadow-md">
+            <span className="mt-3 text-xs sm:text-sm font-black text-white px-3.5 py-1.5 rounded-xl bg-red-600/95 shadow-md">
               اطلاعات ورود نادرست است!
             </span>
           </div>

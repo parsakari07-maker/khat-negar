@@ -47,7 +47,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsShaking(true);
     setTimeout(() => {
       setIsShaking(false);
-    }, 650);
+    }, 1000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,13 +97,13 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
             : 'border-[var(--border-color)]'
         }`}
       >
-        {/* Animated Big Rejection Cross Indicator Overlay on Wrong Password */}
+        {/* Animated Big Rejection Cross Indicator Overlay on Wrong Password (1 Second Duration) */}
         {isShaking && (
-          <div className="absolute inset-0 z-30 bg-red-950/25 backdrop-blur-xs flex flex-col items-center justify-center pointer-events-none animate-error-cross">
-            <div className="w-18 h-18 rounded-full bg-red-500/90 text-white flex items-center justify-center shadow-2xl shadow-red-500/50">
-              <XCircle className="w-12 h-12 animate-pulse stroke-[2.5]" />
+          <div className="absolute inset-0 z-30 bg-red-950/25 flex flex-col items-center justify-center pointer-events-none animate-error-cross">
+            <div className="w-18 h-18 rounded-full bg-red-500/95 text-white flex items-center justify-center shadow-2xl shadow-red-500/50">
+              <XCircle className="w-12 h-12 stroke-[2.5]" />
             </div>
-            <span className="mt-2.5 text-xs font-black text-white px-3 py-1 rounded-xl bg-red-600/90 shadow-md">
+            <span className="mt-2.5 text-xs font-black text-white px-3 py-1 rounded-xl bg-red-600/95 shadow-md">
               اطلاعات ورود نادرست است!
             </span>
           </div>

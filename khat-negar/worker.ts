@@ -23,18 +23,33 @@ export interface Env {
   JWT_SECRET?: string;
 }
 
+export interface UserRecord {
+  id: string;
+  username: string;
+  role: string;
+  password_hash: string;
+  is_active: boolean;
+  is_suspicious?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 /**
  * Initialize Supabase client securely from runtime environment secrets
  */
 function getSupabase(env: Env): SupabaseClient {
-  const url = env.SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  const rawUrl = env.SUPABASE_URL || '';
+  const url = rawUrl.trim().replace(/\/+$/, '');
+  const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
   if (!url || !key) {
     throw new Error('متغیرهای SUPABASE_URL یا SUPABASE_SERVICE_ROLE_KEY در تنظیمات Environment Variables کلودفلر وارد نشده‌اند.');
   }
 
   return createClient(url, key, {
+    db: {
+      schema: 'public'
+    },
     auth: {
       persistSession: false,
       autoRefreshToken: false
@@ -89,6 +104,126 @@ function jsonResponse(data: any, status = 200, extraHeaders: Record<string, stri
   });
 }
 
+// ----------------------------------------------------------------------
+// Multi-Strategy Resilient Database Queries for Users Table
+// ----------------------------------------------------------------------
+
+async function queryUsersDirectRest(env: Env, queryParams = ''): Promise<{ data: any[] | null; error: string | null; status: number }> {
+  const rawUrl = (env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!rawUrl || !key) return { data: null, error: 'Supabase credentials missing', status: 500 };
+
+  const endpoint = `${rawUrl}/rest/v1/users${queryParams ? (queryParams.startsWith('?') ? queryParams : `?${queryParams}`) : ''}`;
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Accept': 'application/json',
+        'Accept-Profile': 'public',
+        'Content-Profile': 'public'
+      }
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return { data: Array.isArray(data) ? data : [data], error: null, status: res.status };
+    } else {
+      const txt = await res.text();
+      return { data: null, error: `HTTP ${res.status}: ${txt}`, status: res.status };
+    }
+  } catch (err: any) {
+    return { data: null, error: err?.message || String(err), status: 500 };
+  }
+}
+
+async function findUserByUsername(supabase: SupabaseClient, env: Env, username: string): Promise<UserRecord | null> {
+  const cleanUsername = username.trim().toLowerCase();
+
+  // Strategy 1: supabase.schema('public').from('users')
+  try {
+    const { data } = await supabase
+      .schema('public')
+      .from('users')
+      .select('*')
+      .ilike('username', cleanUsername);
+    if (data && data.length > 0) return data[0] as UserRecord;
+  } catch {}
+
+  // Strategy 2: supabase.from('users')
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .ilike('username', cleanUsername);
+    if (data && data.length > 0) return data[0] as UserRecord;
+  } catch {}
+
+  // Strategy 3: Direct PostgREST HTTP REST query with explicit public schema profile
+  try {
+    const restRes = await queryUsersDirectRest(env, `username=ilike.${encodeURIComponent(cleanUsername)}&select=*`);
+    if (restRes.data && restRes.data.length > 0) {
+      return restRes.data[0] as UserRecord;
+    }
+  } catch {}
+
+  return null;
+}
+
+async function findUserById(supabase: SupabaseClient, env: Env, userId: string): Promise<UserRecord | null> {
+  // Strategy 1: supabase.schema('public').from('users')
+  try {
+    const { data } = await supabase
+      .schema('public')
+      .from('users')
+      .select('*')
+      .eq('id', userId);
+    if (data && data.length > 0) return data[0] as UserRecord;
+  } catch {}
+
+  // Strategy 2: supabase.from('users')
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId);
+    if (data && data.length > 0) return data[0] as UserRecord;
+  } catch {}
+
+  // Strategy 3: Direct PostgREST HTTP REST query
+  try {
+    const restRes = await queryUsersDirectRest(env, `id=eq.${encodeURIComponent(userId)}&select=*`);
+    if (restRes.data && restRes.data.length > 0) {
+      return restRes.data[0] as UserRecord;
+    }
+  } catch {}
+
+  return null;
+}
+
+async function getAllUsersList(supabase: SupabaseClient, env: Env): Promise<UserRecord[]> {
+  try {
+    const { data } = await supabase
+      .schema('public')
+      .from('users')
+      .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+      .order('created_at', { ascending: false });
+    if (data) return data as UserRecord[];
+  } catch {}
+
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+      .order('created_at', { ascending: false });
+    if (data) return data as UserRecord[];
+  } catch {}
+
+  const restRes = await queryUsersDirectRest(env, 'select=id,username,role,is_active,is_suspicious,created_at,updated_at&order=created_at.desc');
+  return restRes.data || [];
+}
+
 /**
  * Central API Request Router for Cloudflare Edge
  */
@@ -116,16 +251,17 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
 
   // 1.1 Safe Authentication Diagnostic Endpoint (Zero secrets exposed)
   if (pathname === '/api/debug-auth' || pathname === '/api/auth/debug') {
+    const rawUrl = (env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+    const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+
     let supabaseHost = 'NOT_SET';
     try {
-      if (env.SUPABASE_URL) {
-        supabaseHost = new URL(env.SUPABASE_URL).hostname;
-      }
+      if (rawUrl) supabaseHost = new URL(rawUrl).hostname;
     } catch {
       supabaseHost = 'INVALID_URL';
     }
 
-    // 1. Test bcrypt pure-JS engine in Cloudflare Worker environment
+    // Test bcrypt engine
     let bcryptWorks = false;
     let bcryptError: string | null = null;
     try {
@@ -136,40 +272,66 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     }
 
     let supabaseClient: SupabaseClient | null = null;
-    let supabaseInitError: string | null = null;
     try {
       supabaseClient = getSupabase(env);
-    } catch (e: any) {
-      supabaseInitError = e?.message || String(e);
-    }
+    } catch {}
 
-    if (!supabaseClient) {
-      return jsonResponse({
-        success: false,
-        diagnostic: {
-          supabaseHost,
-          hasServiceRoleKey: !!env.SUPABASE_SERVICE_ROLE_KEY,
-          supabaseInitError,
-          bcryptEngineWorks: bcryptWorks,
-          bcryptError
-        }
+    // Check exposed routes on Supabase PostgREST root
+    let exposedPaths: string[] = [];
+    let postgrestRootError: string | null = null;
+    try {
+      const rootRes = await fetch(`${rawUrl}/rest/v1/`, {
+        headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
       });
+      if (rootRes.ok) {
+        const spec = await rootRes.json() as any;
+        if (spec && spec.paths) {
+          exposedPaths = Object.keys(spec.paths);
+        }
+      } else {
+        postgrestRootError = `HTTP ${rootRes.status}: ${await rootRes.text()}`;
+      }
+    } catch (err: any) {
+      postgrestRootError = err?.message || String(err);
     }
 
-    // 2. Query users table
-    const { data: allUsers, error: usersError } = await supabaseClient
-      .from('users')
-      .select('id, username, role, is_active, is_suspicious, created_at, password_hash');
+    // Direct REST test on /rest/v1/users
+    const directUsersRest = await queryUsersDirectRest(env, 'select=id,username,role,is_active,created_at,password_hash');
 
-    const parsaUser = allUsers?.find((u: any) => (u.username || '').trim().toLowerCase() === 'parsa');
+    // Supabase client tests
+    let supabaseSchemaPublicUsersRes: any = null;
+    let supabaseFromUsersRes: any = null;
+    if (supabaseClient) {
+      try {
+        const res = await supabaseClient.schema('public').from('users').select('id, username, role, is_active, password_hash');
+        supabaseSchemaPublicUsersRes = { ok: !res.error, count: res.data?.length, error: res.error?.message || null };
+      } catch (e: any) {
+        supabaseSchemaPublicUsersRes = { ok: false, error: e?.message || String(e) };
+      }
+
+      try {
+        const res = await supabaseClient.from('users').select('id, username, role, is_active, password_hash');
+        supabaseFromUsersRes = { ok: !res.error, count: res.data?.length, error: res.error?.message || null };
+      } catch (e: any) {
+        supabaseFromUsersRes = { ok: false, error: e?.message || String(e) };
+      }
+    }
+
+    // Check parsa user record
+    let parsaUser: any = null;
+    if (directUsersRest.data && directUsersRest.data.length > 0) {
+      parsaUser = directUsersRest.data.find((u: any) => (u.username || '').trim().toLowerCase() === 'parsa');
+    }
+    if (!parsaUser && supabaseClient) {
+      parsaUser = await findUserByUsername(supabaseClient, env, 'parsa');
+    }
+
     let parsaAnalysis = null;
-
     if (parsaUser) {
       const hash = (parsaUser.password_hash || '').trim();
       const isBcrypt = hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
       let comparesWith13101389 = false;
       let comparesWithAdminDefault = false;
-      let comparisonError: string | null = null;
 
       try {
         if (isBcrypt) {
@@ -179,55 +341,47 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
           comparesWith13101389 = (hash === '13101389');
           comparesWithAdminDefault = (hash === 'AdminPersianTypo2025!');
         }
-      } catch (e: any) {
-        comparisonError = e?.message || String(e);
-      }
+      } catch {}
 
       parsaAnalysis = {
         id: parsaUser.id,
         usernameInDb: parsaUser.username,
         role: parsaUser.role,
         isActive: parsaUser.is_active,
-        isSuspicious: parsaUser.is_suspicious,
-        createdAt: parsaUser.created_at,
         hasPasswordHash: !!hash,
         passwordHashLength: hash.length,
-        passwordHashFormat: isBcrypt ? 'valid_bcrypt_format' : (hash.length > 0 ? 'plain_text_or_custom_hash' : 'empty'),
+        passwordFormat: isBcrypt ? 'valid_bcrypt_hash' : (hash.length > 0 ? 'plain_text_or_custom' : 'empty'),
         passwordMatches_13101389: comparesWith13101389,
-        passwordMatches_AdminPersianTypo2025: comparesWithAdminDefault,
-        comparisonError
+        passwordMatches_AdminPersianTypo2025: comparesWithAdminDefault
       };
     }
-
-    // 3. Test auxiliary tables
-    const [sessionsRes, logsRes] = await Promise.all([
-      supabaseClient.from('sessions').select('id', { count: 'exact', head: true }),
-      supabaseClient.from('login_logs').select('id', { count: 'exact', head: true })
-    ]);
 
     return jsonResponse({
       success: true,
       diagnostic: {
         supabaseHost,
-        hasServiceRoleKey: !!env.SUPABASE_SERVICE_ROLE_KEY,
-        bcryptEngine: {
-          worksInCloudflare: bcryptWorks,
-          error: bcryptError
-        },
-        database: {
-          usersTableAccessible: !usersError,
-          usersTableError: usersError?.message || null,
-          totalUsersCount: allUsers?.length || 0,
-          usernamesFound: (allUsers || []).map((u: any) => u.username),
-          sessionsTableAccessible: !sessionsRes.error,
-          sessionsTableError: sessionsRes.error?.message || null,
-          loginLogsTableAccessible: !logsRes.error,
-          loginLogsTableError: logsRes.error?.message || null
+        hasServiceRoleKey: !!key,
+        bcryptEngineWorks: bcryptWorks,
+        bcryptError,
+        postgrestExposedPaths: exposedPaths,
+        postgrestRootError,
+        queryMethods: {
+          directRestUsers: {
+            status: directUsersRest.status,
+            accessible: !directUsersRest.error,
+            error: directUsersRest.error,
+            totalRowsFound: directUsersRest.data?.length || 0
+          },
+          supabaseSchemaPublicUsers: supabaseSchemaPublicUsersRes,
+          supabaseFromUsers: supabaseFromUsersRes
         },
         userParsa: {
           foundInDatabase: !!parsaUser,
           details: parsaAnalysis
-        }
+        },
+        troubleshootingHint: (!exposedPaths.includes('/users') && !directUsersRest.data)
+          ? "در دیتابیس Supabase کش PostgREST رفرش نشده است. لطفاً دستور NOTIFY pgrst, 'reload schema'; را در SQL Editor اجرا کنید."
+          : "دسترسی به جدول کاربران و کاربر parsa با موفقیت برقرار است."
       }
     });
   }
@@ -269,13 +423,11 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (!sessionData) return null;
       if (new Date(sessionData.expires_at).getTime() < Date.now()) return null;
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
-        .eq('id', sessionData.user_id)
-        .single();
+      const user = await findUserById(supabase, env, sessionData.user_id);
+      if (!user) return null;
 
-      return userData || null;
+      const { password_hash, ...safeUser } = user;
+      return safeUser;
     } catch {
       return null;
     }
@@ -335,13 +487,8 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         return jsonResponse({ success: false, error: 'نام کاربری و کلمه عبور الزامی است.' }, 400);
       }
 
-      // Query user case-insensitively and safely
-      let { data: users, error: userFindError } = await supabase
-        .from('users')
-        .select('*')
-        .ilike('username', username);
-
-      let user = users && users.length > 0 ? users[0] : null;
+      // Find user using multi-strategy query
+      let user = await findUserByUsername(supabase, env, username);
 
       let valid = false;
       if (user && user.password_hash) {
@@ -350,12 +497,13 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
           if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$')) {
             valid = bcrypt.compareSync(password, storedHash);
           } else {
-            // Fallback for plain-text entries entered directly in Supabase table editor
+            // Support plain-text stored passwords entered in Supabase Table Editor
             valid = (storedHash === password);
             if (valid) {
-              // Automatically upgrade to secure bcrypt hash
               const newHash = bcrypt.hashSync(password, 10);
-              supabase.from('users').update({ password_hash: newHash }).eq('id', user.id).then();
+              try {
+                await supabase.schema('public').from('users').update({ password_hash: newHash }).eq('id', user.id);
+              } catch {}
             }
           }
         } catch {
@@ -363,24 +511,25 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         }
       }
 
-      // Auto-provision initial superadmin if table is empty or user parsa does not exist
+      // Auto-provision initial superadmin if user parsa does not exist yet
       if (!user && username === 'parsa' && (password === '13101389' || password === 'AdminPersianTypo2025!')) {
         const hash = bcrypt.hashSync(password, 10);
-        const { data: newUser } = await supabase.from('users').insert({
-          username: 'parsa',
-          role: 'admin',
-          password_hash: hash,
-          is_active: true
-        }).select().single();
+        try {
+          const { data: newUser } = await supabase.from('users').insert({
+            username: 'parsa',
+            role: 'admin',
+            password_hash: hash,
+            is_active: true
+          }).select().single();
 
-        if (newUser) {
-          user = newUser;
-          valid = true;
-        }
+          if (newUser) {
+            user = newUser;
+            valid = true;
+          }
+        } catch {}
       }
 
       if (!user || !valid) {
-        // Log failed login
         try {
           await supabase.from('login_logs').insert({
             username,
@@ -388,11 +537,9 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             ip_address: clientIp,
             user_agent: deviceInfo,
             success: false,
-            fail_reason: !user ? 'کاربر یافت نشد' : 'کلمه عبور نادرست است'
+            fail_reason: !user ? 'کاربر در دیتابیس یافت نشد' : 'کلمه عبور نادرست است'
           });
-        } catch {
-          // Non-blocking log error
-        }
+        } catch {}
 
         return jsonResponse({
           success: false,
@@ -563,16 +710,18 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       }
 
       // Telemetry log
-      await supabase.from('generation_logs').insert({
-        user_id: user.id,
-        username: user.username,
-        master_prompt_id: selectedMaster.id,
-        master_prompt_name: selectedMaster.name_fa,
-        ai_model_id: config.aiModelId,
-        style_id: config.calligraphyStyleId,
-        form_id: config.typographyFormId,
-        is_generate_again: isAgain
-      });
+      try {
+        await supabase.from('generation_logs').insert({
+          user_id: user.id,
+          username: user.username,
+          master_prompt_id: selectedMaster.id,
+          master_prompt_name: selectedMaster.name_fa,
+          ai_model_id: config.aiModelId,
+          style_id: config.calligraphyStyleId,
+          form_id: config.typographyFormId,
+          is_generate_again: isAgain
+        });
+      } catch {}
 
       return jsonResponse({
         success: true,
@@ -624,10 +773,11 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
 
       // Admin Dashboard / Stats
       if (pathname === '/api/admin/dashboard' || pathname === '/api/admin/stats') {
+        const allUsers = await getAllUsersList(supabase, env);
+        const activeUsersCount = allUsers.filter(u => u.is_active).length;
+        const inactiveUsersCount = allUsers.filter(u => !u.is_active).length;
+
         const [
-          usersCount,
-          activeUsersCount,
-          inactiveUsersCount,
           secEventsCount,
           genCount,
           genAgainCount,
@@ -635,9 +785,6 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
           stylesCount,
           recentLoginsRes
         ] = await Promise.all([
-          supabase.from('users').select('*', { count: 'exact', head: true }),
-          supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_active', true),
-          supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_active', false),
           supabase.from('security_events').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
           supabase.from('generation_logs').select('*', { count: 'exact', head: true }),
           supabase.from('generation_logs').select('*', { count: 'exact', head: true }).eq('is_generate_again', true),
@@ -649,9 +796,9 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         return jsonResponse({
           success: true,
           stats: {
-            totalUsers: usersCount.count || 0,
-            activeUsers: activeUsersCount.count || 0,
-            inactiveUsers: inactiveUsersCount.count || 0,
+            totalUsers: allUsers.length,
+            activeUsers: activeUsersCount,
+            inactiveUsers: inactiveUsersCount,
             pendingSecurityEvents: secEventsCount.count || 0,
             totalGenerations: genCount.count || 0,
             totalGenerateAgain: genAgainCount.count || 0,
@@ -666,11 +813,8 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       // Admin Users CRUD
       if (pathname === '/api/admin/users') {
         if (method === 'GET') {
-          const { data: users } = await supabase
-            .from('users')
-            .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
-            .order('created_at', { ascending: false });
-          return jsonResponse({ success: true, users: users || [] });
+          const users = await getAllUsersList(supabase, env);
+          return jsonResponse({ success: true, users });
         }
 
         if (method === 'POST') {

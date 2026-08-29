@@ -137,7 +137,7 @@ async function startServer() {
           });
         }
 
-        const isMatch = verifyPassword(rawPassword, storedUser.password_hash);
+        const isMatch = verifyPassword(rawPassword, storedUser.password_hash, storedUser.username);
         if (!isMatch) {
           db.recordLoginLog({
             userId: storedUser.id,
@@ -217,13 +217,17 @@ async function startServer() {
     return res.json({ success: true, message: 'با موفقیت خارج شدید.' });
   });
 
-  // Get Session User
-  app.get('/api/auth/session', (req: AuthenticatedRequest, res) => {
+  // Get Session User (unified endpoints)
+  const handleGetSession = (req: AuthenticatedRequest, res: express.Response) => {
     if (!req.user) {
       return res.json({ success: true, user: null });
     }
     return res.json({ success: true, user: req.user });
-  });
+  };
+
+  app.get('/api/auth/session', handleGetSession);
+  app.get('/api/auth/me', handleGetSession);
+  app.get('/api/me', handleGetSession);
 
   // ==========================================
   // TYPOGRAPHY CONFIGURATION (PUBLIC / AUTH)
@@ -264,46 +268,47 @@ async function startServer() {
   // ==========================================
 
   // Generate Initial Prompt (Uses Master Prompt #1 or first active)
-  app.post(
-    '/api/prompts/generate',
-    requireAuth,
-    rateLimit(30, 60 * 1000, 'gen'),
-    (req: AuthenticatedRequest, res) => {
-      try {
-        const config = req.body;
-        const result = MasterPromptEngine.generate(config, {
-          isGenerateAgain: false
-        });
+  const handlePromptGenerate = (req: AuthenticatedRequest, res: express.Response) => {
+    try {
+      const config = req.body;
+      const result = MasterPromptEngine.generate(config, {
+        isGenerateAgain: false
+      });
 
-        // Record telemetry
+      // Record telemetry
+      if (req.user) {
         db.recordGenerationLog({
-          userId: req.user!.id,
-          username: req.user!.username,
+          userId: req.user.id,
+          username: req.user.username,
           masterPromptId: result.masterPrompt.id,
           masterPromptName: result.masterPrompt.name_fa,
           aiModelId: config.aiModelId,
-          styleId: config.calligraphyStyleId,
-          formId: config.typographyFormId,
+          styleId: config.calligraphyStyleId || config.styleId,
+          formId: config.typographyFormId || config.formId,
           isGenerateAgain: false
         });
-
-        return res.json({
-          success: true,
-          prompt: result.prompt,
-          masterPromptId: result.masterPrompt.id,
-          masterPromptName: result.masterPrompt.name_fa,
-          masterPromptIndex: result.masterPromptIndex,
-          totalActiveMasterPrompts: result.totalActive,
-          message: 'پرامپت با موفقیت تولید شد.'
-        });
-      } catch (err: any) {
-        return res.status(400).json({
-          success: false,
-          error: err.message || 'در تولید پرامپت خطایی رخ داد.'
-        });
       }
+
+      return res.json({
+        success: true,
+        prompt: result.prompt,
+        renderedPrompt: result.prompt,
+        masterPromptId: result.masterPrompt.id,
+        masterPromptName: result.masterPrompt.name_fa,
+        masterPromptIndex: result.masterPromptIndex,
+        totalActiveMasterPrompts: result.totalActive,
+        message: 'پرامپت با موفقیت تولید شد.'
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'در تولید پرامپت خطایی رخ داد.'
+      });
     }
-  );
+  };
+
+  app.post('/api/prompts/generate', requireAuth, rateLimit(30, 60 * 1000, 'gen'), handlePromptGenerate);
+  app.post('/api/prompt/generate', requireAuth, rateLimit(30, 60 * 1000, 'gen'), handlePromptGenerate);
 
   // Generate Again (Cycles to next active Master Prompt: #2, #3, #4, #5)
   app.post(

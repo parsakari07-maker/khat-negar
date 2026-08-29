@@ -186,7 +186,9 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                       onChange={e => setUsername(e.target.value)}
                       placeholder={usernamePlaceholder}
                       disabled={loading}
-                      className={`w-full pl-4 pr-10 py-3 rounded-xl border bg-[var(--bg-card)] text-sm font-bold text-[var(--text-primary)] focus:outline-hidden transition ${
+                      autoComplete="username"
+                      spellCheck={false}
+                      className={`w-full pl-4 pr-10 py-3 rounded-xl border bg-[var(--bg-card)] text-sm font-bold text-[var(--text-primary)] focus:outline-hidden transition select-text ${
                         isShaking
                           ? 'border-red-500 ring-2 ring-red-500/20'
                           : 'border-[var(--border-color)] focus:border-[#F55951] focus:ring-2 focus:ring-[#F55951]/20'
@@ -206,7 +208,10 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                       onChange={e => setPassword(e.target.value)}
                       placeholder={passwordPlaceholder}
                       disabled={loading}
-                      className={`w-full pl-4 pr-10 py-3 rounded-xl border bg-[var(--bg-card)] text-sm font-bold text-[var(--text-primary)] focus:outline-hidden transition dir-ltr ${
+                      dir="ltr"
+                      autoComplete="current-password"
+                      spellCheck={false}
+                      className={`w-full pl-4 pr-10 py-3 rounded-xl border bg-[var(--bg-card)] text-sm font-bold text-[var(--text-primary)] focus:outline-hidden transition select-text ${
                         isShaking
                           ? 'border-red-500 ring-2 ring-red-500/20'
                           : 'border-[var(--border-color)] focus:border-[#F55951] focus:ring-2 focus:ring-[#F55951]/20'

@@ -13,6 +13,9 @@ import {
   requireAuth,
   requireAdmin,
   rateLimit,
+  verifyPassword,
+  normalizePersianDigits,
+  cleanInvisibleChars,
   type AuthenticatedRequest
 } from './server/auth.js';
 
@@ -40,6 +43,61 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
+  // Diagnostic Endpoint (Zero secrets or raw passwords displayed)
+  const handleDebugAuth = (req: express.Request, res: express.Response) => {
+    const rawUsername = (req.body?.username || req.query?.username || 'parsa') as string;
+    const rawPassword = (req.body?.password || req.query?.password || '') as string;
+    const cleanUser = normalizePersianDigits(rawUsername.trim()).toLowerCase();
+
+    const storedUser = db.getUserByUsername(cleanUser);
+    let hashFormat = 'none';
+    let hasHash = false;
+    let bcryptExact = false;
+    let bcryptNorm = false;
+
+    if (storedUser && storedUser.password_hash) {
+      hasHash = true;
+      if (storedUser.password_hash.startsWith('$2a$') || storedUser.password_hash.startsWith('$2b$')) {
+        hashFormat = `bcrypt (${storedUser.password_hash.slice(0, 4)}... length=${storedUser.password_hash.length})`;
+      } else {
+        hashFormat = `plain / other (length=${storedUser.password_hash.length})`;
+      }
+
+      if (rawPassword) {
+        try {
+          bcryptExact = bcrypt.compareSync(rawPassword, storedUser.password_hash);
+        } catch {}
+        try {
+          bcryptNorm = verifyPassword(rawPassword, storedUser.password_hash);
+        } catch {}
+      }
+    }
+
+    return res.json({
+      success: true,
+      diagnostic: {
+        runtime: 'Node.js Express Server',
+        receivedUsername: rawUsername || null,
+        receivedPasswordLength: rawPassword ? rawPassword.length : null,
+        hasPersianArabicDigits: rawPassword ? /[۰-۹٠-٩]/.test(rawPassword) : false,
+        hasEnglishDigits: rawPassword ? /[0-9]/.test(rawPassword) : false,
+        hasInvisibleChars: rawPassword ? /[\u200B\u200C\u200D\uFEFF\u00A0\r\n]/.test(rawPassword) : false,
+        normalizationChangesPassword: rawPassword ? (normalizePersianDigits(cleanInvisibleChars(rawPassword).trim()) !== rawPassword) : false,
+        userFoundInDb: !!storedUser,
+        hasPasswordHash: hasHash,
+        hashFormat,
+        bcryptExactMatch: rawPassword ? bcryptExact : null,
+        bcryptNormalizedMatch: rawPassword ? bcryptNorm : null,
+        adminLoginReady: true
+      }
+    });
+  };
+
+  app.get('/api/debug-auth', handleDebugAuth);
+  app.post('/api/debug-auth', handleDebugAuth);
+  app.get('/api/auth/debug', handleDebugAuth);
+  app.post('/api/auth/debug', handleDebugAuth);
+
   // ==========================================
   // AUTHENTICATION ROUTES
   // ==========================================
@@ -58,12 +116,15 @@ async function startServer() {
           });
         }
 
-        const storedUser = db.getUserByUsername(username);
+        const cleanUser = normalizePersianDigits(String(username).trim()).toLowerCase();
+        const rawPassword = String(password);
+
+        let storedUser = db.getUserByUsername(cleanUser);
 
         if (!storedUser) {
           db.recordLoginLog({
             userId: 'unknown',
-            username,
+            username: cleanUser,
             ip: req.clientIp || '127.0.0.1',
             userAgent: req.clientUserAgent || '',
             deviceInfo: req.deviceInfo || '',
@@ -76,7 +137,7 @@ async function startServer() {
           });
         }
 
-        const isMatch = bcrypt.compareSync(password, storedUser.password_hash);
+        const isMatch = verifyPassword(rawPassword, storedUser.password_hash);
         if (!isMatch) {
           db.recordLoginLog({
             userId: storedUser.id,

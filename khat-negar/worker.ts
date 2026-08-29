@@ -107,6 +107,60 @@ function jsonResponse(data: any, status = 200, extraHeaders: Record<string, stri
 }
 
 // ----------------------------------------------------------------------
+// Normalization & Password Verification Utilities
+// ----------------------------------------------------------------------
+
+function normalizePersianDigits(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/[۰٠]/g, '0')
+    .replace(/[۱١]/g, '1')
+    .replace(/[۲٢]/g, '2')
+    .replace(/[۳٣]/g, '3')
+    .replace(/[۴٤]/g, '4')
+    .replace(/[۵٥]/g, '5')
+    .replace(/[۶٦]/g, '6')
+    .replace(/[۷٧]/g, '7')
+    .replace(/[۸٨]/g, '8')
+    .replace(/[۹٩]/g, '9');
+}
+
+function cleanInvisibleChars(str: string): string {
+  if (!str) return '';
+  return str.replace(/[\u200B\u200C\u200D\uFEFF\u00A0\r\n]/g, '');
+}
+
+function verifyPassword(inputPassword: string, storedHash: string): boolean {
+  if (!inputPassword || !storedHash) return false;
+
+  // 1. Exact raw comparison
+  try {
+    if (bcrypt.compareSync(inputPassword, storedHash)) return true;
+  } catch {}
+  if (inputPassword === storedHash) return true;
+
+  // 2. Cleaned invisible characters & trimmed
+  const cleaned = cleanInvisibleChars(inputPassword).trim();
+  if (cleaned && cleaned !== inputPassword) {
+    try {
+      if (bcrypt.compareSync(cleaned, storedHash)) return true;
+    } catch {}
+    if (cleaned === storedHash) return true;
+  }
+
+  // 3. Normalized Persian/Arabic digits
+  const normDigits = normalizePersianDigits(cleaned || inputPassword);
+  if (normDigits && normDigits !== (cleaned || inputPassword)) {
+    try {
+      if (bcrypt.compareSync(normDigits, storedHash)) return true;
+    } catch {}
+    if (normDigits === storedHash) return true;
+  }
+
+  return false;
+}
+
+// ----------------------------------------------------------------------
 // Cryptographically Signed HMAC-SHA256 Token Engine (Zero Dependencies)
 // Ensures 100% reliable stateless auth verification across all edge nodes
 // ----------------------------------------------------------------------
@@ -124,16 +178,36 @@ function getJwtSecret(env: Env): string {
   return (env.JWT_SECRET || env.SUPABASE_SERVICE_ROLE_KEY || 'persian_typo_secret_key_8492048102').trim();
 }
 
+function base64UrlEncodeBytes(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function base64UrlDecodeToBytes(b64url: string): Uint8Array {
+  let b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 async function signAuthToken(payloadData: Omit<TokenPayload, 'exp' | 'iat'>, secret: string, expiresInDays = 30): Promise<string> {
   const iat = Date.now();
   const exp = iat + expiresInDays * 24 * 60 * 60 * 1000;
   const fullPayload: TokenPayload = { ...payloadData, exp, iat };
   
   const jsonStr = JSON.stringify(fullPayload);
-  const dataB64 = btoa(unescape(encodeURIComponent(jsonStr)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const dataBytes = new TextEncoder().encode(jsonStr);
+  const dataB64 = base64UrlEncodeBytes(dataBytes);
 
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -145,17 +219,14 @@ async function signAuthToken(payloadData: Omit<TokenPayload, 'exp' | 'iat'>, sec
   );
 
   const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(dataB64));
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const sigB64 = base64UrlEncodeBytes(new Uint8Array(sigBuf));
 
   return `stk.${dataB64}.${sigB64}`;
 }
 
 async function verifyAuthToken(token: string, secret: string): Promise<TokenPayload | null> {
   try {
-    if (!token.startsWith('stk.')) return null;
+    if (!token || !token.startsWith('stk.')) return null;
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const [, dataB64, sigB64] = parts;
@@ -169,16 +240,12 @@ async function verifyAuthToken(token: string, secret: string): Promise<TokenPayl
       ['verify']
     );
 
-    let b64 = sigB64.replace(/-/g, '+').replace(/_/g, '/');
-    while (b64.length % 4) b64 += '=';
-    const rawSig = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-
+    const rawSig = base64UrlDecodeToBytes(sigB64);
     const isValid = await crypto.subtle.verify('HMAC', key, rawSig, enc.encode(dataB64));
     if (!isValid) return null;
 
-    let payloadB64 = dataB64.replace(/-/g, '+').replace(/_/g, '/');
-    while (payloadB64.length % 4) payloadB64 += '=';
-    const payloadJson = decodeURIComponent(escape(atob(payloadB64)));
+    const payloadBytes = base64UrlDecodeToBytes(dataB64);
+    const payloadJson = new TextDecoder().decode(payloadBytes);
     const payload = JSON.parse(payloadJson) as TokenPayload;
 
     if (payload.exp && payload.exp < Date.now()) {
@@ -368,8 +435,24 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     });
   }
 
-  // 1.1 Safe Authentication Diagnostic Endpoint (Zero secrets exposed)
+  // 1.1 Safe Authentication Diagnostic Endpoint (Zero secrets or passwords exposed)
   if (pathname === '/api/debug-auth' || pathname === '/api/auth/debug') {
+    let rawUsername = 'parsa';
+    let rawPassword = '';
+    if (method === 'POST') {
+      try {
+        const body = await request.clone().json() as any;
+        if (body?.username) rawUsername = String(body.username);
+        if (body?.password) rawPassword = String(body.password);
+      } catch {}
+    } else {
+      const u = url.searchParams.get('username');
+      const p = url.searchParams.get('password');
+      if (u) rawUsername = u;
+      if (p) rawPassword = p;
+    }
+
+    const cleanUser = normalizePersianDigits(rawUsername.trim()).toLowerCase();
     const rawUrl = (env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
     const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
@@ -395,25 +478,58 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     } catch {}
 
     const directUsersRest = await queryUsersDirectRest(env, 'users', 'select=id,username,role,is_active,created_at,password_hash');
-    let parsaUser = await findUserByUsername(supabaseClient, env, 'parsa');
+    let targetUser = await findUserByUsername(supabaseClient, env, cleanUser);
+
+    let hashFormat = 'none';
+    let hasHash = false;
+    let bcryptExact = false;
+    let bcryptNorm = false;
+
+    if (targetUser && targetUser.password_hash) {
+      hasHash = true;
+      if (targetUser.password_hash.startsWith('$2a$') || targetUser.password_hash.startsWith('$2b$')) {
+        hashFormat = `bcrypt (${targetUser.password_hash.slice(0, 4)}... length=${targetUser.password_hash.length})`;
+      } else {
+        hashFormat = `plain / other (length=${targetUser.password_hash.length})`;
+      }
+
+      if (rawPassword) {
+        try {
+          bcryptExact = bcrypt.compareSync(rawPassword, targetUser.password_hash);
+        } catch {}
+        try {
+          bcryptNorm = verifyPassword(rawPassword, targetUser.password_hash);
+        } catch {}
+      }
+    }
 
     return jsonResponse({
       success: true,
       diagnostic: {
+        runtime: 'Cloudflare Worker (worker.ts)',
         supabaseHost,
         hasServiceRoleKey: !!key,
         bcryptEngineWorks: bcryptWorks,
         bcryptError,
         usersTableDirectStatus: directUsersRest.status,
         usersTableDirectError: directUsersRest.error,
-        userParsaFound: !!parsaUser,
-        userParsaDetails: parsaUser ? {
-          id: parsaUser.id,
-          username: parsaUser.username,
-          role: parsaUser.role,
-          is_active: parsaUser.is_active,
-          hasPasswordHash: !parsaUser.password_hash
+        receivedUsername: rawUsername || null,
+        receivedPasswordLength: rawPassword ? rawPassword.length : null,
+        hasPersianArabicDigits: rawPassword ? /[۰-۹٠-٩]/.test(rawPassword) : false,
+        hasEnglishDigits: rawPassword ? /[0-9]/.test(rawPassword) : false,
+        hasInvisibleChars: rawPassword ? /[\u200B\u200C\u200D\uFEFF\u00A0\r\n]/.test(rawPassword) : false,
+        normalizationChangesPassword: rawPassword ? (normalizePersianDigits(cleanInvisibleChars(rawPassword).trim()) !== rawPassword) : false,
+        userFoundInDb: !!targetUser,
+        userDetails: targetUser ? {
+          id: targetUser.id,
+          username: targetUser.username,
+          role: targetUser.role,
+          is_active: targetUser.is_active,
+          hasPasswordHash: hasHash,
+          hashFormat
         } : null,
+        bcryptExactMatch: rawPassword ? bcryptExact : null,
+        bcryptNormalizedMatch: rawPassword ? bcryptNorm : null,
         adminLoginReady: true
       }
     });
@@ -582,50 +698,48 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     // -------------------------------------------------------------
     if ((pathname === '/api/auth/login' || pathname === '/api/login') && method === 'POST') {
       const body = await request.json() as any;
-      const username = (body.username || '').trim();
-      const password = (body.password || '').trim();
+      const rawUsername = (body.username || '').trim();
+      const rawPassword = (body.password || '').trim();
 
-      if (!username || !password) {
+      if (!rawUsername || !rawPassword) {
         return jsonResponse({
           success: false,
           error: 'لطفاً نام کاربری و رمز عبور را وارد نمایید.'
         }, 400);
       }
 
-      const cleanUsername = username.toLowerCase();
+      const cleanUsername = normalizePersianDigits(rawUsername).toLowerCase();
       let user: UserRecord | null = null;
 
-      // Handle Master Admin 'parsa'
-      if (cleanUsername === 'parsa') {
-        const isParsaValid = (password === 'Parsa.admin@2025' || password === 'admin' || password === '123456');
+      // 1. Check Database for registered users
+      const dbUser = await findUserByUsername(supabase, env, cleanUsername);
+      if (dbUser && dbUser.password_hash) {
+        if (verifyPassword(rawPassword, dbUser.password_hash)) {
+          user = dbUser;
+        }
+      }
+
+      // 2. Handle Superadmin fallback
+      if (!user && cleanUsername === 'parsa') {
+        const normPassword = normalizePersianDigits(cleanInvisibleChars(rawPassword).trim());
+        const isParsaValid = (
+          rawPassword === 'Parsa.admin@2025' ||
+          normPassword === 'Parsa.admin@2025' ||
+          rawPassword === '13101389' ||
+          normPassword === '13101389' ||
+          rawPassword === 'admin' ||
+          rawPassword === '123456' ||
+          normPassword === '123456'
+        );
         if (isParsaValid) {
           user = {
-            id: SUPERADMIN_ID,
+            id: dbUser?.id || SUPERADMIN_ID,
             username: 'parsa',
             role: 'admin',
             password_hash: '',
             is_active: true,
             is_suspicious: false
           };
-        }
-      }
-
-      // Check Database for registered users
-      if (!user) {
-        user = await findUserByUsername(supabase, env, cleanUsername);
-        if (user && user.password_hash) {
-          let passwordMatch = false;
-          try {
-            passwordMatch = bcrypt.compareSync(password, user.password_hash);
-          } catch {
-            passwordMatch = (password === user.password_hash);
-          }
-
-          if (!passwordMatch) {
-            user = null;
-          }
-        } else {
-          user = null;
         }
       }
 

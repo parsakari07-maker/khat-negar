@@ -445,9 +445,12 @@ async function startServer() {
   app.post('/api/admin/users/:id/reset-password', requireAdmin, (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
-      const { newPassword } = req.body;
+      const newPassword = req.body.newPassword || req.body.new_password || req.body.password;
       const targetUser = db.getUserById(id);
       if (!targetUser) return res.status(404).json({ success: false, error: 'کاربر یافت نشد.' });
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ success: false, error: 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.' });
+      }
 
       db.resetPassword(id, newPassword);
 
@@ -561,6 +564,61 @@ async function startServer() {
       return res.json({ success: true, prompts });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: 'خطا در دریافت پرامپت‌های مادر.' });
+    }
+  });
+
+  app.post('/api/admin/master-prompts', requireAdmin, (req: AuthenticatedRequest, res) => {
+    try {
+      const { name_fa, description_fa, template, active, sort_order } = req.body;
+      if (!name_fa || !name_fa.trim()) {
+        return res.status(400).json({ success: false, error: 'عنوان پرامپت مادر الزامی است.' });
+      }
+      if (!template || !template.trim()) {
+        return res.status(400).json({ success: false, error: 'متن قالب پرامپت مادر الزامی است.' });
+      }
+
+      const prompt = db.createMasterPrompt(
+        { name_fa, description_fa, template, active, sort_order },
+        req.user!.username
+      );
+
+      db.recordAuditLog({
+        adminId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'افزودن پرامپت مادر',
+        details: `پرامپت مادر جدید «${prompt.name_fa}» با موفقیت افزوده شد.`,
+        ip: req.clientIp || '127.0.0.1'
+      });
+
+      return res.json({
+        success: true,
+        prompt,
+        message: `پرامپت مادر «${prompt.name_fa}» با موفقیت ثبت شد.`
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message || 'خطا در افزودن پرامپت مادر.' });
+    }
+  });
+
+  app.delete('/api/admin/master-prompts/:id', requireAdmin, (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const target = db.getMasterPromptById(id);
+      if (!target) return res.status(404).json({ success: false, error: 'پرامپت مادر یافت نشد.' });
+
+      db.deleteMasterPrompt(id);
+
+      db.recordAuditLog({
+        adminId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'حذف پرامپت مادر',
+        details: `پرامپت مادر «${target.name_fa}» حذف شد.`,
+        ip: req.clientIp || '127.0.0.1'
+      });
+
+      return res.json({ success: true, message: 'پرامپت مادر با موفقیت حذف شد.' });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message || 'خطا در حذف پرامپت مادر.' });
     }
   });
 
@@ -1211,67 +1269,71 @@ async function startServer() {
   // ==========================================
 
   // Public Submit Feedback & Report (with rate limit and character limit protection)
-  app.post(
-    '/api/feedback/submit',
-    rateLimit(8, 5 * 60 * 1000, 'feedback'),
-    (req: AuthenticatedRequest, res) => {
-      try {
-        const { type, title, description } = req.body;
+  const handleFeedbackSubmit = (req: AuthenticatedRequest, res: any) => {
+    try {
+      const title = req.body.title || req.body.subject || req.body.name || 'گزارش کاربر';
+      const description = req.body.description || req.body.message || req.body.details || req.body.content;
+      const type = req.body.type || 'suggestion';
 
-        if (!title || !title.trim()) {
-          return res.status(400).json({
-            success: false,
-            error: 'عنوان گزارش یا پیشنهاد الزامی است.'
-          });
-        }
-
-        if (!description || !description.trim()) {
-          return res.status(400).json({
-            success: false,
-            error: 'توضیحات تکمیلی الزامی است.'
-          });
-        }
-
-        if (title.trim().length > 150) {
-          return res.status(400).json({
-            success: false,
-            error: 'عنوان نباید بیش از ۱۵۰ کاراکتر باشد.'
-          });
-        }
-
-        if (description.trim().length > 2000) {
-          return res.status(400).json({
-            success: false,
-            error: 'توضیحات نباید بیش از ۲۰۰۰ کاراکتر باشد.'
-          });
-        }
-
-        const validTypes = ['report', 'suggestion'];
-        const sanitizedType = validTypes.includes(type) ? type : 'suggestion';
-
-        const record = db.createFeedbackReport({
-          userId: req.user?.id,
-          username: req.user?.username,
-          type: sanitizedType,
-          title: title.trim(),
-          description: description.trim(),
-          ip: req.clientIp || '127.0.0.1'
-        });
-
-        return res.json({
-          success: true,
-          feedback: record,
-          message: 'پیام شما با موفقیت ثبت شد و توسط مدیران سامانه بررسی خواهد شد.'
-        });
-      } catch (err: any) {
-        console.error('Feedback submit error:', err);
-        return res.status(500).json({
+      if (!title || !String(title).trim()) {
+        return res.status(400).json({
           success: false,
-          error: 'خطا در ثبت پیام. لطفاً دوباره تلاش کنید.'
+          error: 'عنوان گزارش یا پیشنهاد الزامی است.'
         });
       }
+
+      if (!description || !String(description).trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'توضیحات تکمیلی الزامی است.'
+        });
+      }
+
+      if (String(title).trim().length > 150) {
+        return res.status(400).json({
+          success: false,
+          error: 'عنوان نباید بیش از ۱۵۰ کاراکتر باشد.'
+        });
+      }
+
+      if (String(description).trim().length > 2000) {
+        return res.status(400).json({
+          success: false,
+          error: 'توضیحات نباید بیش از ۲۰۰۰ کاراکتر باشد.'
+        });
+      }
+
+      const validTypes = ['report', 'suggestion'];
+      const sanitizedType = validTypes.includes(type) ? type : 'suggestion';
+
+      const record = db.createFeedbackReport({
+        userId: req.user?.id,
+        username: req.user?.username || req.body.name || req.body.email,
+        type: sanitizedType,
+        title: String(title).trim(),
+        description: String(description).trim(),
+        ip: req.clientIp || '127.0.0.1'
+      });
+
+      return res.json({
+        success: true,
+        feedback: record,
+        message: 'پیام شما با موفقیت ثبت شد و توسط مدیران سامانه بررسی خواهد شد.'
+      });
+    } catch (err: any) {
+      console.error('Feedback submit error:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'خطا در ثبت پیام. لطفاً دوباره تلاش کنید.'
+      });
     }
-  );
+  };
+
+  app.post('/api/feedback/submit', rateLimit(8, 5 * 60 * 1000, 'feedback'), handleFeedbackSubmit);
+  app.post('/api/feedback', rateLimit(8, 5 * 60 * 1000, 'feedback'), handleFeedbackSubmit);
+  app.post('/api/feedbacks', rateLimit(8, 5 * 60 * 1000, 'feedback'), handleFeedbackSubmit);
+  app.post('/api/report', rateLimit(8, 5 * 60 * 1000, 'feedback'), handleFeedbackSubmit);
+  app.post('/api/reports', rateLimit(8, 5 * 60 * 1000, 'feedback'), handleFeedbackSubmit);
 
   // Admin Feedback Management
   app.get('/api/admin/feedback', requireAdmin, (req: AuthenticatedRequest, res) => {
@@ -1281,7 +1343,7 @@ async function startServer() {
       const search = req.query.search as string;
 
       const feedbacks = db.getFeedbackReports({ type, status, search });
-      return res.json({ success: true, feedbacks });
+      return res.json({ success: true, feedbacks, feedbackReports: feedbacks, reports: feedbacks });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: 'خطا در دریافت لیست گزارش‌ها و پیشنهادات.' });
     }

@@ -896,22 +896,37 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ success: true });
   }
 
-  if (pathname === '/api/feedback' && method === 'POST') {
+  if (
+    (pathname === '/api/feedback' ||
+      pathname === '/api/feedback/submit' ||
+      pathname === '/api/feedbacks' ||
+      pathname === '/api/report' ||
+      pathname === '/api/reports') &&
+    method === 'POST'
+  ) {
     try {
       const body = await request.json() as any;
-      const { name, email, type, subject, message } = body;
-      if (!message || !message.trim()) {
-        return jsonResponse({ success: false, error: 'متن پیام الزامی است.' }, 400);
+      const title = body.title || body.subject || body.name || 'گزارش کاربر';
+      const description = body.description || body.message || body.details || body.content;
+      const type = body.type || 'suggestion';
+      const email = body.email || '';
+      const name = body.name || '';
+
+      if (!description || !String(description).trim()) {
+        return jsonResponse({ success: false, error: 'متن پیام یا توضیحات الزامی است.' }, 400);
       }
 
       const feedbackId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'fb-' + Date.now();
       const feedbackRecord = {
         id: feedbackId,
-        name: (name || 'کاربر ناشناس').trim(),
-        email: (email || '').trim(),
-        type: type || 'feedback',
-        subject: (subject || 'بدون موضوع').trim(),
-        message: message.trim(),
+        name: (name || 'کاربر سامانه').trim(),
+        username: (name || 'کاربر سامانه').trim(),
+        email: email.trim(),
+        type: type,
+        title: String(title).trim(),
+        subject: String(title).trim(),
+        description: String(description).trim(),
+        message: String(description).trim(),
         status: 'unread',
         ip_address: clientIp,
         created_at: new Date().toISOString()
@@ -920,15 +935,18 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (supabase) {
         try {
           await supabase.from('feedback_reports').insert(feedbackRecord);
-        } catch {}
+        } catch (dbErr) {
+          console.error('Supabase feedback insert error:', dbErr);
+        }
       }
 
       return jsonResponse({
         success: true,
-        message: 'پیام شما با موفقیت ثبت شد. با تشکر از همکاری شما.'
+        feedback: feedbackRecord,
+        message: 'پیام شما با موفقیت ثبت شد و توسط مدیران سامانه بررسی خواهد شد. سپاس از همراهی شما!'
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: 'خطا در ثبت پیام.' }, 500);
+      return jsonResponse({ success: false, error: 'خطا در ثبت پیام: ' + (err?.message || 'نامشخص') }, 500);
     }
   }
 

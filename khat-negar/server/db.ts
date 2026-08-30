@@ -627,6 +627,63 @@ class DatabaseEngine {
     return this.data.master_prompts.find(mp => mp.id === id) || null;
   }
 
+  createMasterPrompt(
+    promptData: {
+      name_fa: string;
+      description_fa?: string;
+      template: string;
+      sort_order?: number;
+      active?: boolean;
+    },
+    adminUsername: string
+  ): MasterPrompt {
+    if (!promptData.name_fa || !promptData.name_fa.trim()) {
+      throw new Error('عنوان پرامپت مادر الزامی است.');
+    }
+    if (!promptData.template || !promptData.template.trim()) {
+      throw new Error('قالب پرامپت مادر الزامی است.');
+    }
+
+    const now = new Date().toISOString();
+    const id = `mp-${crypto.randomUUID().slice(0, 8)}`;
+    const newPrompt: MasterPrompt = {
+      id,
+      key: `master-prompt-${Date.now()}`,
+      name_fa: promptData.name_fa.trim(),
+      description_fa: promptData.description_fa ? promptData.description_fa.trim() : '',
+      template: promptData.template.trim(),
+      sort_order: promptData.sort_order ?? (this.data.master_prompts.length + 1),
+      active: promptData.active ?? true,
+      version: 1,
+      created_at: now,
+      updated_at: now
+    };
+
+    const initialVersion: MasterPromptVersion = {
+      id: `v-${id}-1`,
+      master_prompt_id: id,
+      version: 1,
+      template: newPrompt.template,
+      description_fa: newPrompt.description_fa,
+      edited_by: adminUsername,
+      created_at: now
+    };
+
+    this.data.master_prompts.push(newPrompt);
+    this.data.master_prompt_versions.unshift(initialVersion);
+    this.saveDatabase();
+    return newPrompt;
+  }
+
+  deleteMasterPrompt(id: string): void {
+    if (this.data.master_prompts.length <= 1) {
+      throw new Error('حداقل یک پرامپت مادر باید در سامانه باقی بماند.');
+    }
+    this.data.master_prompts = this.data.master_prompts.filter(mp => mp.id !== id);
+    this.data.master_prompt_versions = this.data.master_prompt_versions.filter(v => v.master_prompt_id !== id);
+    this.saveDatabase();
+  }
+
   updateMasterPrompt(
     id: string,
     updates: {

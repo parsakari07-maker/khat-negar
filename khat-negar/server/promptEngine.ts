@@ -65,7 +65,7 @@ export class MasterPromptEngine {
     }
 
     return {
-      isValid: missingVariables.length === 0,
+      isValid: Boolean(template && template.trim()),
       missingVariables,
       warnings
     };

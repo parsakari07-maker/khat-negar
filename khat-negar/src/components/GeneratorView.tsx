@@ -27,6 +27,16 @@ import { PromptResultCard } from './PromptResultCard.js';
 import { AspectRatioIcon } from './AspectRatioIcon.js';
 import { apiFetch } from '../utils/api.js';
 import { useSettings } from '../context/SettingsContext.js';
+import {
+  INITIAL_TYPOGRAPHY_STYLES,
+  INITIAL_TYPOGRAPHY_FORMS,
+  INITIAL_MATERIALS,
+  INITIAL_DIMENSIONS,
+  INITIAL_LIGHTINGS,
+  INITIAL_SHADOWS,
+  INITIAL_ASPECT_RATIOS,
+  INITIAL_AI_MODELS
+} from '../constants/initialData.js';
 import type {
   TypographyStyle,
   TypographyForm,
@@ -56,16 +66,16 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
   const generatorSubmitBtn = settings.generator_submit_btn_fa || 'تولید پرامپت تخصصی تایپوگرافی';
   const generatorSubmitLoading = settings.generator_submit_loading_fa || 'در حال پردازش و نگارش پرامپت...';
 
-  // Options loaded from server
-  const [styles, setStyles] = useState<TypographyStyle[]>([]);
-  const [forms, setForms] = useState<TypographyForm[]>([]);
-  const [materials, setMaterials] = useState<MaterialOption[]>([]);
-  const [dimensions, setDimensions] = useState<DimensionOption[]>([]);
-  const [lightings, setLightings] = useState<LightingOption[]>([]);
-  const [shadows, setShadows] = useState<ShadowOption[]>([]);
-  const [aspectRatios, setAspectRatios] = useState<AspectRatioOption[]>([]);
-  const [aiModels, setAiModels] = useState<AiModelOption[]>([]);
-  const [loadingOptions, setLoadingOptions] = useState(true);
+  // Options loaded from server with robust initial defaults
+  const [styles, setStyles] = useState<TypographyStyle[]>(INITIAL_TYPOGRAPHY_STYLES);
+  const [forms, setForms] = useState<TypographyForm[]>(INITIAL_TYPOGRAPHY_FORMS);
+  const [materials, setMaterials] = useState<MaterialOption[]>(INITIAL_MATERIALS);
+  const [dimensions, setDimensions] = useState<DimensionOption[]>(INITIAL_DIMENSIONS);
+  const [lightings, setLightings] = useState<LightingOption[]>(INITIAL_LIGHTINGS);
+  const [shadows, setShadows] = useState<ShadowOption[]>(INITIAL_SHADOWS);
+  const [aspectRatios, setAspectRatios] = useState<AspectRatioOption[]>(INITIAL_ASPECT_RATIOS);
+  const [aiModels, setAiModels] = useState<AiModelOption[]>(INITIAL_AI_MODELS);
+  const [loadingOptions, setLoadingOptions] = useState(false);
 
   // Active Style Category tab
   const [styleTab, setStyleTab] = useState<'traditional' | 'artistic'>('traditional');
@@ -115,14 +125,30 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
         }>('/api/typography/options');
 
         if (ok && data.success) {
-          setStyles(data.styles || []);
-          setForms(data.forms || []);
-          setMaterials(data.materials || []);
-          setDimensions(data.dimensions || []);
-          setLightings(data.lightings || []);
-          setShadows(data.shadows || []);
-          setAspectRatios(data.aspectRatios || []);
-          setAiModels(data.aiModels || []);
+          if (Array.isArray(data.styles) && data.styles.length > 0) {
+            setStyles(data.styles);
+          }
+          if (Array.isArray(data.forms) && data.forms.length > 0) {
+            setForms(data.forms);
+          }
+          if (Array.isArray(data.materials) && data.materials.length > 0) {
+            setMaterials(data.materials);
+          }
+          if (Array.isArray(data.dimensions) && data.dimensions.length > 0) {
+            setDimensions(data.dimensions);
+          }
+          if (Array.isArray(data.lightings) && data.lightings.length > 0) {
+            setLightings(data.lightings);
+          }
+          if (Array.isArray(data.shadows) && data.shadows.length > 0) {
+            setShadows(data.shadows);
+          }
+          if (Array.isArray(data.aspectRatios) && data.aspectRatios.length > 0) {
+            setAspectRatios(data.aspectRatios);
+          }
+          if (Array.isArray(data.aiModels) && data.aiModels.length > 0) {
+            setAiModels(data.aiModels);
+          }
 
           if (data.settings) {
             setConfig(prev => ({

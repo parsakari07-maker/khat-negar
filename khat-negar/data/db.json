@@ -4,12 +4,12 @@
       "id": "usr-parsa-admin",
       "username": "parsa",
       "role": "admin",
-      "password_hash": "$2b$10$sDkaAiMieEtEN5wWSNhy9O4aSV4.MZAfYexh87FPvvzW2RZDQddmq",
+      "password_hash": "$2b$10$EAJeTd/IO9PqXn99aqOvYOyZXgNqsQTIM3uX9.hRDLAxboe6tDR4a",
       "is_active": true,
       "created_at": "2026-08-29T12:11:05.272Z",
-      "updated_at": "2026-08-30T15:30:02.243Z",
+      "updated_at": "2026-08-30T16:28:11.390Z",
       "is_suspicious": false,
-      "last_login_at": "2026-08-30T15:33:47.715Z"
+      "last_login_at": "2026-08-30T16:29:04.462Z"
     },
     {
       "id": "usr-demo-02",
@@ -77,9 +77,89 @@
       "user_agent": "",
       "created_at": "2026-08-30T15:33:36.516Z",
       "expires_at": "2027-08-30T15:33:36.516Z"
+    },
+    {
+      "id": "sess-a472372b",
+      "user_id": "usr-parsa-admin",
+      "token": "ade59c5f237702128d97968e1b0561318071e9cff4444efcdda664a79797ec55",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:24:47.582Z",
+      "expires_at": "2027-08-30T16:24:47.582Z"
+    },
+    {
+      "id": "sess-c2f9604e",
+      "user_id": "usr-parsa-admin",
+      "token": "2f8f6b6ff5d5d417a849854fd5425a163c7aa6e31b45af35fd96fbed09545198",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:27:26.095Z",
+      "expires_at": "2027-08-30T16:27:26.095Z"
+    },
+    {
+      "id": "sess-c9c8a137",
+      "user_id": "usr-parsa-admin",
+      "token": "98f36a5043d4b7fa8a9d12d5181d5d57260180727ec4fb3ba1b94687f50cfe01",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:28:13.680Z",
+      "expires_at": "2027-08-30T16:28:13.680Z"
+    },
+    {
+      "id": "sess-8ae1c6ed",
+      "user_id": "usr-parsa-admin",
+      "token": "f6185c63b87e765f37c9b70f79d7d346a5b2098bbc052d9e6ebd196305169073",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:29:04.462Z",
+      "expires_at": "2027-08-30T16:29:04.462Z"
     }
   ],
   "login_logs": [
+    {
+      "id": "log-1788107344461-3371",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:29:04.461Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788107293679-039b",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:28:13.679Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788107246093-bb59",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:27:26.093Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788107087581-2029",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:24:47.581Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
     {
       "id": "log-1788104027715-144d",
       "user_id": "usr-parsa-admin",
@@ -838,6 +918,321 @@
   },
   "admin_audit_logs": [
     {
+      "id": "audit-1788107344699-e282",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.699Z"
+    },
+    {
+      "id": "audit-1788107344693-b782",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.693Z"
+    },
+    {
+      "id": "audit-1788107344691-4352",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.691Z"
+    },
+    {
+      "id": "audit-1788107344687-8a0f",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.687Z"
+    },
+    {
+      "id": "audit-1788107344684-71b1",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» ویرایش شد (نسخه جدید: 2).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.684Z"
+    },
+    {
+      "id": "audit-1788107344681-7cbf",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن پرامپت مادر",
+      "details": "پرامپت مادر جدید «پرامپت آزمایشی جدید» با موفقیت افزوده شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.681Z"
+    },
+    {
+      "id": "audit-1788107344675-8011",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107344464» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.675Z"
+    },
+    {
+      "id": "audit-1788107344671-baef",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_1788107344464» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.671Z"
+    },
+    {
+      "id": "audit-1788107344571-d617",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107344464» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.571Z"
+    },
+    {
+      "id": "audit-1788107344564-bcb6",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107344464» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.564Z"
+    },
+    {
+      "id": "audit-1788107293949-30a8",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.949Z"
+    },
+    {
+      "id": "audit-1788107293939-5020",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.939Z"
+    },
+    {
+      "id": "audit-1788107293936-a6a0",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.936Z"
+    },
+    {
+      "id": "audit-1788107293932-e1c0",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.932Z"
+    },
+    {
+      "id": "audit-1788107293929-ce82",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» ویرایش شد (نسخه جدید: 2).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.929Z"
+    },
+    {
+      "id": "audit-1788107293925-791e",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن پرامپت مادر",
+      "details": "پرامپت مادر جدید «پرامپت آزمایشی جدید» با موفقیت افزوده شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.925Z"
+    },
+    {
+      "id": "audit-1788107293918-363d",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107293683» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.919Z"
+    },
+    {
+      "id": "audit-1788107293914-3f2c",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_1788107293683» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.914Z"
+    },
+    {
+      "id": "audit-1788107293810-b028",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107293683» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.810Z"
+    },
+    {
+      "id": "audit-1788107293802-47ed",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107293683» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.802Z"
+    },
+    {
+      "id": "audit-1788107246371-c080",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.371Z"
+    },
+    {
+      "id": "audit-1788107246364-df87",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.364Z"
+    },
+    {
+      "id": "audit-1788107246361-8a31",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.361Z"
+    },
+    {
+      "id": "audit-1788107246358-114c",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی جدید» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.358Z"
+    },
+    {
+      "id": "audit-1788107246352-9ddb",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن پرامپت مادر",
+      "details": "پرامپت مادر جدید «پرامپت آزمایشی جدید» با موفقیت افزوده شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.352Z"
+    },
+    {
+      "id": "audit-1788107246346-3f7c",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107246099» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.346Z"
+    },
+    {
+      "id": "audit-1788107246341-3e37",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_1788107246099» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.341Z"
+    },
+    {
+      "id": "audit-1788107246233-14b2",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107246099» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.233Z"
+    },
+    {
+      "id": "audit-1788107246225-47b6",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107246099» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.225Z"
+    },
+    {
+      "id": "audit-1788107087737-b15a",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.737Z"
+    },
+    {
+      "id": "audit-1788107087732-0645",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.732Z"
+    },
+    {
+      "id": "audit-1788107087729-0cc9",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.729Z"
+    },
+    {
+      "id": "audit-1788107087719-5aa5",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107087584» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.719Z"
+    },
+    {
+      "id": "audit-1788107087714-deb2",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107087584» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.714Z"
+    },
+    {
+      "id": "audit-1788107087707-528b",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107087584» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.707Z"
+    },
+    {
       "id": "audit-1788104027947-ea4e",
       "admin_id": "usr-parsa-admin",
       "admin_username": "parsa",
@@ -963,5 +1358,76 @@
       "timestamp": "2026-08-29T13:21:10.193Z"
     }
   ],
-  "feedback_reports": []
+  "feedback_reports": [
+    {
+      "id": "fb-1788107344457-634cc6",
+      "username": "کاربر آزمایشی",
+      "type": "report",
+      "title": "گزارش خطای آزمایشی",
+      "description": "تست ارسال از روت جایگزین فیدبک",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:29:04.457Z"
+    },
+    {
+      "id": "fb-1788107344452-20be09",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:29:04.452Z"
+    },
+    {
+      "id": "fb-1788107293675-22c6b4",
+      "username": "کاربر آزمایشی",
+      "type": "report",
+      "title": "گزارش خطای آزمایشی",
+      "description": "تست ارسال از روت جایگزین فیدبک",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:28:13.675Z"
+    },
+    {
+      "id": "fb-1788107293667-de1298",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:28:13.668Z"
+    },
+    {
+      "id": "fb-1788107246085-d120e2",
+      "username": "کاربر آزمایشی",
+      "type": "report",
+      "title": "گزارش خطای آزمایشی",
+      "description": "تست ارسال از روت جایگزین فیدبک",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:27:26.085Z"
+    },
+    {
+      "id": "fb-1788107246080-1f1828",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:27:26.080Z"
+    },
+    {
+      "id": "fb-1788107087573-4c0c8d",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:24:47.574Z"
+    }
+  ]
 }

@@ -39,10 +39,27 @@ export interface UserRecord {
 
 const SUPERADMIN_ID = '00000000-0000-0000-0000-000000000001';
 
+function normalizeSupabaseUrl(rawUrl: string): string {
+  let url = (rawUrl || '').trim();
+  if (!url) return '';
+  
+  // Remove wrapping quotes if any
+  url = url.replace(/^['"]+|['"]+$/g, '').trim();
+
+  // Strip protocol temporarily if parsing with URL constructor
+  try {
+    const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+    // Keep only origin (e.g., https://xxxx.supabase.co)
+    return parsed.origin;
+  } catch {
+    // Fallback regex cleaning
+    return url.replace(/\/rest(\/v\d+)?\/?$/i, '').replace(/\/+$/, '');
+  }
+}
+
 function getSupabase(env: Env): SupabaseClient | null {
-  const rawUrl = env.SUPABASE_URL || '';
-  const url = rawUrl.trim().replace(/\/+$/, '');
-  const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const url = normalizeSupabaseUrl(env.SUPABASE_URL || '');
+  const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^['"]+|['"]+$/g, '');
 
   if (!url || !key) {
     return null;
@@ -1144,40 +1161,90 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       return jsonResponse({ success: false, error: 'دسترسی غیرمجاز. این بخش مخصوص مدیران است.' }, 403);
     }
 
-    // 1. Admin Stats & Dashboard
-    if (pathname === '/api/admin/stats' && method === 'GET') {
+    // 1. Admin Stats & Dashboard (Support both /api/admin/dashboard and /api/admin/stats)
+    if ((pathname === '/api/admin/dashboard' || pathname === '/api/admin/stats') && method === 'GET') {
       let totalUsers = 1;
+      let activeUsers = 1;
+      let inactiveUsers = 0;
+      let pendingSecurityEvents = 0;
+      let totalGenerations = 0;
+      let totalGenerateAgain = 0;
+      let activeMasterPrompts = INITIAL_MASTER_PROMPTS.filter(p => p.active).length;
+      let activeStyles = INITIAL_TYPOGRAPHY_STYLES.filter(s => s.active).length;
       let totalPrompts = INITIAL_MASTER_PROMPTS.length;
-      let totalStyles = INITIAL_TYPOGRAPHY_STYLES.length;
+      let totalStylesCount = INITIAL_TYPOGRAPHY_STYLES.length;
       let totalLogs = 0;
       let totalFeedback = 0;
+      let recentLogins: any[] = [];
+      let recentAudits: any[] = [];
 
       if (supabase) {
         try {
-          const [uRes, pRes, sRes, lRes, fRes] = await Promise.all([
+          const [uRes, pRes, sRes, lRes, fRes, secRes, genRes, genAgainRes, actURes, actPRes, actSRes, recLogRes, recAudRes] = await Promise.all([
             supabase.from('users').select('*', { count: 'exact', head: true }),
             supabase.from('master_prompts').select('*', { count: 'exact', head: true }),
             supabase.from('typography_styles').select('*', { count: 'exact', head: true }),
             supabase.from('login_logs').select('*', { count: 'exact', head: true }),
-            supabase.from('feedback_reports').select('*', { count: 'exact', head: true })
+            supabase.from('feedback_reports').select('*', { count: 'exact', head: true }),
+            supabase.from('security_events').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }),
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).eq('is_generate_again', true),
+            supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_active', true),
+            supabase.from('master_prompts').select('*', { count: 'exact', head: true }).eq('active', true),
+            supabase.from('typography_styles').select('*', { count: 'exact', head: true }).eq('active', true),
+            supabase.from('login_logs').select('*').order('timestamp', { ascending: false }).limit(8),
+            supabase.from('admin_audit_logs').select('*').order('timestamp', { ascending: false }).limit(8)
           ]);
 
           if (typeof uRes.count === 'number') totalUsers = Math.max(1, uRes.count);
+          if (typeof actURes.count === 'number') activeUsers = Math.max(1, actURes.count);
+          inactiveUsers = Math.max(0, totalUsers - activeUsers);
+          if (typeof secRes.count === 'number') pendingSecurityEvents = secRes.count;
+          if (typeof genRes.count === 'number') totalGenerations = genRes.count;
+          if (typeof genAgainRes.count === 'number') totalGenerateAgain = genAgainRes.count;
+          if (typeof actPRes.count === 'number') activeMasterPrompts = actPRes.count;
+          if (typeof actSRes.count === 'number') activeStyles = actSRes.count;
           if (typeof pRes.count === 'number') totalPrompts = pRes.count;
-          if (typeof sRes.count === 'number') totalStyles = sRes.count;
+          if (typeof sRes.count === 'number') totalStylesCount = sRes.count;
           if (typeof lRes.count === 'number') totalLogs = lRes.count;
           if (typeof fRes.count === 'number') totalFeedback = fRes.count;
-        } catch {}
+          if (recLogRes.data) {
+            recentLogins = recLogRes.data.map(l => ({
+              id: l.id,
+              user_id: l.user_id,
+              username: l.username,
+              timestamp: l.timestamp,
+              ip_address: l.ip_address,
+              user_agent: l.user_agent,
+              device_info: l.device_info || parseUserAgent(l.user_agent),
+              status: l.success ? 'success' : 'failed',
+              reason: l.fail_reason || '',
+              is_suspicious: !!l.is_suspicious
+            }));
+          }
+          if (recAudRes.data) recentAudits = recAudRes.data;
+        } catch (e) {
+          console.error('Error fetching stats from Supabase:', e);
+        }
       }
 
       return jsonResponse({
         success: true,
         stats: {
           totalUsers,
+          activeUsers,
+          inactiveUsers,
+          pendingSecurityEvents,
+          totalGenerations,
+          totalGenerateAgain,
+          activeMasterPrompts,
+          activeStyles,
           totalPrompts,
-          totalStyles,
+          totalStyles: totalStylesCount,
           totalLogs,
           totalFeedback,
+          recentLogins,
+          recentAudits,
           systemStatus: 'online',
           dbConnected: !!supabase
         }

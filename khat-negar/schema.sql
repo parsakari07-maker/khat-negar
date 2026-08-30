@@ -27,9 +27,10 @@ CREATE TABLE IF NOT EXISTS login_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     username VARCHAR(100) NOT NULL,
-    role VARCHAR(30) NOT NULL,
+    role VARCHAR(30) NOT NULL DEFAULT 'user',
     ip_address VARCHAR(64) NOT NULL,
     user_agent TEXT NOT NULL,
+    device_info TEXT,
     success BOOLEAN NOT NULL,
     fail_reason TEXT,
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -143,12 +144,20 @@ CREATE TABLE IF NOT EXISTS feedback_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     username VARCHAR(100),
+    name VARCHAR(100),
+    email VARCHAR(255),
     type VARCHAR(30) NOT NULL CHECK (type IN ('report', 'suggestion')),
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read', 'resolved')),
     ip_address VARCHAR(64),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS site_settings (
+    id VARCHAR(50) PRIMARY KEY DEFAULT 'default',
+    settings_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS admin_audit_logs (

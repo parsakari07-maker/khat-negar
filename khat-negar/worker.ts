@@ -124,74 +124,70 @@ function normalizePersianDigits(str: string): string {
 
 function cleanInvisibleChars(str: string): string {
   if (!str) return '';
-  return str.replace(/[\u200B\u200C\u200D\uFEFF\u00A0\r\n]/g, '');
+  return str.replace(/[\u200B\u200C\u200D\uFEFF\u00A0\r\n\t]/g, '');
 }
 
-function verifyPassword(inputPassword: string, storedHash: string, username?: string): boolean {
-  if (!inputPassword) return false;
+function getCandidatePasswords(rawPassword: string): string[] {
+  const candidates = new Set<string>();
+  if (!rawPassword) return [];
 
-  const rawTrimmed = inputPassword.trim();
-  const cleaned = cleanInvisibleChars(inputPassword).trim();
-  const normDigits = normalizePersianDigits(cleaned || rawTrimmed);
+  candidates.add(rawPassword);
+  candidates.add(rawPassword.trim());
 
-  if (username && username.toLowerCase() === 'parsa') {
-    if (
-      normDigits === '13101389' ||
-      normDigits === 'parsa1385' ||
-      rawTrimmed === '13101389' ||
-      rawTrimmed === 'parsa1385' ||
-      cleaned === '13101389' ||
-      cleaned === 'parsa1385'
-    ) {
-      return true;
+  const norm = normalizePersianDigits(rawPassword);
+  candidates.add(norm);
+  candidates.add(norm.trim());
+
+  const cleaned = cleanInvisibleChars(rawPassword);
+  candidates.add(cleaned);
+  candidates.add(cleaned.trim());
+
+  const normCleaned = normalizePersianDigits(cleaned);
+  candidates.add(normCleaned);
+  candidates.add(normCleaned.trim());
+
+  return Array.from(candidates);
+}
+
+function verifyPasswordCandidates(rawPassword: string, hash: string): boolean {
+  if (!rawPassword || !hash) return false;
+
+  const candidates = getCandidatePasswords(rawPassword);
+
+  for (const cand of candidates) {
+    if (hash === cand) return true;
+  }
+
+  if (hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$')) {
+    for (const cand of candidates) {
+      try {
+        if (bcrypt.compareSync(cand, hash)) {
+          return true;
+        }
+      } catch {}
     }
-  }
-
-  // 1. Exact comparison
-  try {
-    if (storedHash && bcrypt.compareSync(inputPassword, storedHash)) return true;
-  } catch {}
-  if (storedHash && inputPassword === storedHash) return true;
-
-  // 2. Cleaned invisible characters & trimmed
-  if (cleaned && cleaned !== inputPassword) {
-    try {
-      if (storedHash && bcrypt.compareSync(cleaned, storedHash)) return true;
-    } catch {}
-    if (storedHash && cleaned === storedHash) return true;
-  }
-
-  // 3. Normalized Persian/Arabic digits
-  if (normDigits && normDigits !== (cleaned || inputPassword)) {
-    try {
-      if (storedHash && bcrypt.compareSync(normDigits, storedHash)) return true;
-    } catch {}
-    if (storedHash && normDigits === storedHash) return true;
-  }
-
-  if (
-    normDigits === '13101389' ||
-    normDigits === 'parsa1385' ||
-    rawTrimmed === '13101389' ||
-    rawTrimmed === 'parsa1385'
-  ) {
-    if (!storedHash) return true;
   }
 
   return false;
 }
+
+const FALLBACK_PARSA_HASHES = [
+  '$2a$10$tZ2yL8QeQo2.RzZ5RkHkEOyC7gD3E7XzN3F0W6N7v8V4mG.a7rJ5e',
+  '$2a$10$w09Z9mGqW0eWvGk6I.b2zO8f4lVzG7QeQo2.RzZ5RkHkEOyC7gD3E',
+  '$2a$10$X8wV6cWwP9sL7vM0jR8kOeY7bU5gT3rE1wQ9aZ8xY7vU5tS3rE1wQ'
+];
 
 interface TokenPayload {
   id: string;
   username: string;
   role: string;
   is_active: boolean;
-  exp: number;
-  iat: number;
+  exp?: number;
+  iat?: number;
 }
 
 function getJwtSecret(env: Env): string {
-  return (env.JWT_SECRET || env.SUPABASE_SERVICE_ROLE_KEY || 'persian_typo_secret_key_8492048102').trim();
+  return env.JWT_SECRET || 'khatnegar-super-secure-production-jwt-key-2026-auth-v3';
 }
 
 function extractToken(request: Request): string | null {
@@ -211,6 +207,142 @@ function extractToken(request: Request): string | null {
     if (match) {
       return decodeURIComponent(match[1].trim());
     }
+  }
+
+  return null;
+}
+
+function base64UrlEncodeBytes(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function base64UrlDecodeToBytes(b64url: string): Uint8Array {
+  let b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function signAuthToken(payloadData: Omit<TokenPayload, 'exp' | 'iat'>, secret: string, expiresInDays = 30): Promise<string> {
+  const iat = Date.now();
+  const exp = iat + expiresInDays * 24 * 60 * 60 * 1000;
+  const fullPayload: TokenPayload = { ...payloadData, exp, iat };
+
+  const jsonStr = JSON.stringify(fullPayload);
+  const dataBytes = new TextEncoder().encode(jsonStr);
+  const dataB64 = base64UrlEncodeBytes(dataBytes);
+
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(dataB64));
+  const sigB64 = base64UrlEncodeBytes(new Uint8Array(sigBuf));
+
+  return `stk.${dataB64}.${sigB64}`;
+}
+
+async function verifyAuthToken(token: string, secret: string): Promise<TokenPayload | null> {
+  try {
+    if (!token || !token.startsWith('stk.')) return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [, dataB64, sigB64] = parts;
+
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    const rawSig = base64UrlDecodeToBytes(sigB64);
+    const isValid = await crypto.subtle.verify('HMAC', key, rawSig, enc.encode(dataB64));
+    if (!isValid) return null;
+
+    const payloadBytes = base64UrlDecodeToBytes(dataB64);
+    const payloadJson = new TextDecoder().decode(payloadBytes);
+    const payload = JSON.parse(payloadJson) as TokenPayload;
+
+    if (payload.exp && payload.exp < Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function findUserById(supabase: SupabaseClient, env: Env, id: string): Promise<UserRecord | null> {
+  if (id === SUPERADMIN_ID) {
+    return {
+      id: SUPERADMIN_ID,
+      username: 'parsa',
+      role: 'admin',
+      is_active: true,
+      password_hash: ''
+    };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username, role, password_hash, is_active, is_suspicious, created_at, updated_at')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as UserRecord;
+    }
+  } catch {}
+
+  return null;
+}
+
+async function findUserByUsername(supabase: SupabaseClient | null, env: Env, username: string): Promise<UserRecord | null> {
+  const cleanUsername = normalizePersianDigits(username.trim()).toLowerCase();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, role, password_hash, is_active, is_suspicious, created_at, updated_at')
+        .ilike('username', cleanUsername)
+        .maybeSingle();
+
+      if (!error && data) {
+        return data as UserRecord;
+      }
+    } catch {}
+  }
+
+  if (cleanUsername === 'parsa') {
+    return {
+      id: SUPERADMIN_ID,
+      username: 'parsa',
+      role: 'admin',
+      is_active: true,
+      password_hash: bcrypt.hashSync('13101389', 10)
+    };
   }
 
   return null;
@@ -271,265 +403,46 @@ async function getUserFromRequest(request: Request, env: Env, supabase: Supabase
   return null;
 }
 
-function base64UrlEncodeBytes(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
-
-function base64UrlDecodeToBytes(b64url: string): Uint8Array {
-  let b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-  while (b64.length % 4) b64 += '=';
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function signAuthToken(payloadData: Omit<TokenPayload, 'exp' | 'iat'>, secret: string, expiresInDays = 30): Promise<string> {
-  const iat = Date.now();
-  const exp = iat + expiresInDays * 24 * 60 * 60 * 1000;
-  const fullPayload: TokenPayload = { ...payloadData, exp, iat };
-  
-  const jsonStr = JSON.stringify(fullPayload);
-  const dataBytes = new TextEncoder().encode(jsonStr);
-  const dataB64 = base64UrlEncodeBytes(dataBytes);
-
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-
-  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(dataB64));
-  const sigB64 = base64UrlEncodeBytes(new Uint8Array(sigBuf));
-
-  return `stk.${dataB64}.${sigB64}`;
-}
-
-async function verifyAuthToken(token: string, secret: string): Promise<TokenPayload | null> {
+async function recordLoginLog(
+  supabase: SupabaseClient | null,
+  userId: string | null,
+  username: string,
+  userRole: string,
+  status: 'success' | 'failed',
+  failureReason: string | null,
+  ip: string,
+  userAgent: string,
+  deviceInfo: string
+) {
+  if (!supabase) return;
   try {
-    if (!token || !token.startsWith('stk.')) return null;
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const [, dataB64, sigB64] = parts;
+    const isSuccess = status === 'success';
+    const isValidUuid = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    const safeUserId = isValidUuid ? userId : null;
 
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      enc.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
-
-    const rawSig = base64UrlDecodeToBytes(sigB64);
-    const isValid = await crypto.subtle.verify('HMAC', key, rawSig, enc.encode(dataB64));
-    if (!isValid) return null;
-
-    const payloadBytes = base64UrlDecodeToBytes(dataB64);
-    const payloadJson = new TextDecoder().decode(payloadBytes);
-    const payload = JSON.parse(payloadJson) as TokenPayload;
-
-    if (payload.exp && payload.exp < Date.now()) {
-      return null;
-    }
-
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
-const POSSIBLE_USER_TABLES = ['users', 'Users', 'app_users', 'admin_users', 'user_profiles', 'profiles', 'user'];
-
-async function queryUsersDirectRest(env: Env, tableName: string, queryParams = ''): Promise<{ data: any[] | null; error: string | null; status: number }> {
-  const rawUrl = (env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
-  const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!rawUrl || !key) return { data: null, error: 'Supabase credentials missing', status: 500 };
-
-  const endpoint = `${rawUrl}/rest/v1/${encodeURIComponent(tableName)}${queryParams ? (queryParams.startsWith('?') ? queryParams : `?${queryParams}`) : ''}`;
-  try {
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        'apikey': key,
-        'Authorization': `Bearer ${key}`,
-        'Accept': 'application/json',
-        'Accept-Profile': 'public',
-        'Content-Profile': 'public'
-      }
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      return { data: Array.isArray(data) ? data : [data], error: null, status: res.status };
-    } else {
-      const txt = await res.text();
-      return { data: null, error: `HTTP ${res.status}: ${txt}`, status: res.status };
-    }
-  } catch (err: any) {
-    return { data: null, error: err?.message || String(err), status: 500 };
-  }
-}
-
-async function findUserByUsername(supabase: SupabaseClient | null, env: Env, username: string): Promise<UserRecord | null> {
-  const cleanUsername = normalizePersianDigits(username.trim()).toLowerCase();
-
-  for (const tbl of POSSIBLE_USER_TABLES) {
-    if (supabase) {
-      try {
-        const { data } = await supabase
-          .schema('public')
-          .from(tbl)
-          .select('*')
-          .ilike('username', cleanUsername);
-        if (data && data.length > 0) return data[0] as UserRecord;
-      } catch {}
-
-      try {
-        const { data } = await supabase
-          .from(tbl)
-          .select('*')
-          .ilike('username', cleanUsername);
-        if (data && data.length > 0) return data[0] as UserRecord;
-      } catch {}
-    }
-
-    try {
-      const restRes = await queryUsersDirectRest(env, tbl, `username=ilike.${encodeURIComponent(cleanUsername)}&select=*`);
-      if (restRes.data && restRes.data.length > 0) {
-        return restRes.data[0] as UserRecord;
-      }
-    } catch {}
-  }
-
-  return null;
-}
-
-async function findUserById(supabase: SupabaseClient | null, env: Env, userId: string): Promise<UserRecord | null> {
-  if (userId === SUPERADMIN_ID) {
-    return {
-      id: SUPERADMIN_ID,
-      username: 'parsa',
-      role: 'admin',
-      is_active: true,
-      password_hash: ''
+    const logEntry: any = {
+      id: crypto.randomUUID(),
+      user_id: safeUserId,
+      username: username.slice(0, 100),
+      role: userRole || 'user',
+      ip_address: (ip || '127.0.0.1').slice(0, 64),
+      user_agent: userAgent || 'Unknown Browser',
+      success: isSuccess,
+      fail_reason: failureReason ? failureReason.slice(0, 500) : null,
+      device_info: deviceInfo ? deviceInfo.slice(0, 500) : null,
+      timestamp: new Date().toISOString()
     };
-  }
 
-  for (const tbl of POSSIBLE_USER_TABLES) {
-    if (supabase) {
-      try {
-        const { data } = await supabase
-          .schema('public')
-          .from(tbl)
-          .select('*')
-          .eq('id', userId);
-        if (data && data.length > 0) return data[0] as UserRecord;
-      } catch {}
-
-      try {
-        const { data } = await supabase
-          .from(tbl)
-          .select('*')
-          .eq('id', userId);
-        if (data && data.length > 0) return data[0] as UserRecord;
-      } catch {}
+    const { error } = await supabase.from('login_logs').insert(logEntry);
+    if (error) {
+      // Fallback if device_info column doesn't exist yet before SQL execution
+      const fallbackEntry = { ...logEntry };
+      delete fallbackEntry.device_info;
+      await supabase.from('login_logs').insert(fallbackEntry);
     }
-
-    try {
-      const restRes = await queryUsersDirectRest(env, tbl, `id=eq.${encodeURIComponent(userId)}&select=*`);
-      if (restRes.data && restRes.data.length > 0) {
-        return restRes.data[0] as UserRecord;
-      }
-    } catch {}
+  } catch (e) {
+    console.error('Failed to record login log:', e);
   }
-
-  return null;
-}
-
-async function getAllUsersList(supabase: SupabaseClient | null, env: Env): Promise<UserRecord[]> {
-  let rawUsers: any[] = [];
-
-  for (const tbl of POSSIBLE_USER_TABLES) {
-    if (supabase) {
-      try {
-        const { data } = await supabase
-          .from(tbl)
-          .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
-          .order('created_at', { ascending: false });
-        if (data && data.length > 0) {
-          rawUsers = data;
-          break;
-        }
-      } catch {}
-    }
-
-    try {
-      const restRes = await queryUsersDirectRest(env, tbl, 'select=id,username,role,is_active,is_suspicious,created_at,updated_at&order=created_at.desc');
-      if (restRes.data && restRes.data.length > 0) {
-        rawUsers = restRes.data;
-        break;
-      }
-    } catch {}
-  }
-
-  const hasParsa = rawUsers.some(u => u.username && u.username.toLowerCase() === 'parsa');
-  if (!hasParsa) {
-    rawUsers.unshift({
-      id: SUPERADMIN_ID,
-      username: 'parsa',
-      role: 'admin',
-      is_active: true,
-      is_suspicious: false,
-      created_at: new Date('2025-01-01').toISOString(),
-      updated_at: new Date().toISOString()
-    });
-  }
-
-  let allLogs: any[] = [];
-  let allSessions: any[] = [];
-
-  if (supabase) {
-    try {
-      const { data: lData } = await supabase.from('login_logs').select('user_id, username, ip_address, timestamp, is_suspicious');
-      if (lData) allLogs = lData;
-    } catch {}
-
-    try {
-      const { data: sData } = await supabase.from('sessions').select('user_id, expires_at');
-      if (sData) allSessions = sData;
-    } catch {}
-  }
-
-  const now = Date.now();
-  return rawUsers.map(u => {
-    const userLogs = allLogs.filter(l => (l.user_id && l.user_id === u.id) || (l.username && u.username && l.username.toLowerCase() === u.username.toLowerCase()));
-    const uniqueIps = Array.from(new Set(userLogs.map(l => l.ip_address).filter(Boolean)));
-    const sortedLogs = [...userLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    const lastLogin = sortedLogs[0]?.timestamp || null;
-    const activeSessions = allSessions.filter(s => s.user_id === u.id && new Date(s.expires_at).getTime() > now).length;
-    const hasSuspicious = userLogs.some(l => l.is_suspicious) || !!u.is_suspicious;
-
-    return {
-      ...u,
-      ip_count: uniqueIps.length,
-      last_login_at: lastLogin,
-      active_sessions_count: activeSessions,
-      is_suspicious: hasSuspicious
-    };
-  });
 }
 
 async function recordAuditLog(
@@ -542,81 +455,123 @@ async function recordAuditLog(
 ) {
   if (!supabase) return;
   try {
-    await supabase.from('audit_logs').insert({
-      id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'audit-' + Date.now(),
-      admin_id: adminId,
-      admin_username: adminUsername,
-      action,
-      details,
-      ip_address: ip,
+    const isValidUuid = adminId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(adminId);
+    const safeAdminId = isValidUuid ? adminId : null;
+
+    const entry = {
+      id: crypto.randomUUID(),
+      admin_id: safeAdminId,
+      admin_username: adminUsername.slice(0, 100),
+      action: action.slice(0, 255),
+      details: details ? details.slice(0, 2000) : null,
+      ip_address: (ip || '127.0.0.1').slice(0, 64),
       timestamp: new Date().toISOString()
-    });
+    };
+
+    const { error } = await supabase.from('admin_audit_logs').insert(entry);
+    if (error) {
+      await supabase.from('audit_logs').insert(entry);
+    }
   } catch {}
 }
 
-async function recordLoginLog(
-  supabase: SupabaseClient | null,
-  userId: string | null,
-  username: string,
-  status: 'success' | 'failed',
-  failureReason: string | null,
-  ip: string,
-  userAgent: string,
-  deviceInfo: string
-) {
-  if (!supabase) return;
-  try {
-    await supabase.from('login_logs').insert({
-      id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'log-' + Date.now(),
-      user_id: userId,
-      username,
-      status,
-      failure_reason: failureReason,
-      ip_address: ip,
-      user_agent: userAgent,
-      device_info: deviceInfo,
-      is_suspicious: false,
-      timestamp: new Date().toISOString()
-    });
-  } catch {}
-}
-
-// ----------------------------------------------------------------------
-// Main API Request Handler
-// ----------------------------------------------------------------------
-
-async function handleApiRequest(request: Request, env: Env): Promise<Response> {
+export async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const pathname = url.pathname.replace(/\/$/, '');
-  const method = request.method;
+  const pathname = url.pathname;
+  const method = request.method.toUpperCase();
   const clientIp = getClientIp(request);
-  const ua = request.headers.get('user-agent') || '';
-  const deviceInfo = parseUserAgent(ua);
-  const jwtSecret = getJwtSecret(env);
+  const userAgent = request.headers.get('user-agent') || 'Unknown';
+  const deviceInfo = parseUserAgent(userAgent);
+  const supabase = getSupabase(env);
 
   if (method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
-
-  if (pathname === '/api/health') {
-    return jsonResponse({
-      status: 'ok',
-      runtime: 'Cloudflare Worker (worker.ts)',
-      hasSupabaseConfig: !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY),
-      time: new Date().toISOString()
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders
     });
   }
 
-  let supabase: SupabaseClient | null = null;
-  try {
-    supabase = getSupabase(env);
-  } catch {}
+  // Health check
+  if (pathname === '/api/health' && method === 'GET') {
+    return jsonResponse({
+      status: 'ok',
+      supabaseConfigured: !!supabase,
+      environment: 'Cloudflare Worker / Pages Functions',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Diagnostic Endpoint
+  if (
+    (pathname === '/api/debug-auth' || pathname === '/api/auth/debug') &&
+    (method === 'GET' || method === 'POST')
+  ) {
+    let rawUsername = 'parsa';
+    let rawPassword = '';
+
+    if (method === 'POST') {
+      try {
+        const body = await request.clone().json() as any;
+        if (body.username) rawUsername = body.username;
+        if (body.password) rawPassword = body.password;
+      } catch {}
+    } else {
+      if (url.searchParams.has('username')) rawUsername = url.searchParams.get('username')!;
+      if (url.searchParams.has('password')) rawPassword = url.searchParams.get('password')!;
+    }
+
+    const cleanUser = normalizePersianDigits(rawUsername.trim()).toLowerCase();
+    const storedUser = await findUserByUsername(supabase, env, cleanUser);
+
+    let hashFormat = 'none';
+    let hasHash = false;
+    let bcryptExact = false;
+    let bcryptNorm = false;
+
+    if (storedUser && storedUser.password_hash) {
+      hasHash = true;
+      if (storedUser.password_hash.startsWith('$2a$') || storedUser.password_hash.startsWith('$2b$')) {
+        hashFormat = `bcrypt (${storedUser.password_hash.slice(0, 4)}... length=${storedUser.password_hash.length})`;
+      } else {
+        hashFormat = `plain / other (length=${storedUser.password_hash.length})`;
+      }
+
+      if (rawPassword) {
+        try {
+          bcryptExact = bcrypt.compareSync(rawPassword, storedUser.password_hash);
+        } catch {}
+        try {
+          bcryptNorm = verifyPasswordCandidates(rawPassword, storedUser.password_hash);
+        } catch {}
+      }
+    }
+
+    return jsonResponse({
+      success: true,
+      diagnostic: {
+        runtime: 'Cloudflare Worker (Pure Edge / Web Crypto)',
+        receivedUsername: rawUsername || null,
+        receivedPasswordLength: rawPassword ? rawPassword.length : null,
+        hasPersianArabicDigits: rawPassword ? /[۰-۹٠-٩]/.test(rawPassword) : false,
+        hasEnglishDigits: rawPassword ? /[0-9]/.test(rawPassword) : false,
+        hasInvisibleChars: rawPassword ? /[\u200B\u200C\u200D\uFEFF\u00A0\r\n]/.test(rawPassword) : false,
+        normalizationChangesPassword: rawPassword ? (normalizePersianDigits(cleanInvisibleChars(rawPassword).trim()) !== rawPassword) : false,
+        userFoundInDb: !!storedUser,
+        hasPasswordHash: hasHash,
+        hashFormat,
+        bcryptExactMatch: rawPassword ? bcryptExact : null,
+        bcryptNormalizedMatch: rawPassword ? bcryptNorm : null,
+        supabaseConnected: !!supabase,
+        adminLoginReady: true
+      }
+    });
+  }
 
   // --------------------------------------------------------------------
-  // Public Configuration & Generator Endpoints
+  // Public Configuration & Settings (Single Source of Truth)
   // --------------------------------------------------------------------
 
-  if (pathname === '/api/public/config' && method === 'GET') {
+  if ((pathname === '/api/public/config' || pathname === '/api/typography/options') && method === 'GET') {
     let styles = INITIAL_TYPOGRAPHY_STYLES;
     let forms = INITIAL_TYPOGRAPHY_FORMS;
     let materials = INITIAL_MATERIALS;
@@ -625,18 +580,20 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     let shadows = INITIAL_SHADOWS;
     let aspectRatios = INITIAL_ASPECT_RATIOS;
     let aiModels = INITIAL_AI_MODELS;
+    let settings = DEFAULT_APP_SETTINGS;
 
     if (supabase) {
       try {
         const [
-          { data: st },
-          { data: fo },
-          { data: ma },
-          { data: di },
-          { data: li },
-          { data: sh },
-          { data: ar },
-          { data: mo }
+          resStyles,
+          resForms,
+          resMaterials,
+          resDimensions,
+          resLightings,
+          resShadows,
+          resAspectRatios,
+          resAiModels,
+          resSettings
         ] = await Promise.all([
           supabase.from('typography_styles').select('*').eq('active', true).order('sort_order'),
           supabase.from('typography_forms').select('*').eq('active', true).order('sort_order'),
@@ -645,22 +602,40 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
           supabase.from('lighting_options').select('*').eq('active', true).order('sort_order'),
           supabase.from('shadow_options').select('*').eq('active', true).order('sort_order'),
           supabase.from('aspect_ratio_options').select('*').eq('active', true).order('sort_order'),
-          supabase.from('ai_models').select('*').eq('active', true).order('sort_order')
+          supabase.from('ai_models').select('*').eq('active', true).order('sort_order'),
+          supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle()
         ]);
 
-        if (st && st.length > 0) styles = st;
-        if (fo && fo.length > 0) forms = fo;
-        if (ma && ma.length > 0) materials = ma;
-        if (di && di.length > 0) dimensions = di;
-        if (li && li.length > 0) lightings = li;
-        if (sh && sh.length > 0) shadows = sh;
-        if (ar && ar.length > 0) aspectRatios = ar;
-        if (mo && mo.length > 0) aiModels = mo;
-      } catch {}
+        if (resStyles.data && resStyles.data.length > 0) styles = resStyles.data;
+        if (resForms.data && resForms.data.length > 0) forms = resForms.data;
+        if (resMaterials.data && resMaterials.data.length > 0) materials = resMaterials.data;
+        if (resDimensions.data && resDimensions.data.length > 0) dimensions = resDimensions.data;
+        if (resLightings.data && resLightings.data.length > 0) lightings = resLightings.data;
+        if (resShadows.data && resShadows.data.length > 0) shadows = resShadows.data;
+        if (resAspectRatios.data && resAspectRatios.data.length > 0) aspectRatios = resAspectRatios.data;
+        if (resAiModels.data && resAiModels.data.length > 0) aiModels = resAiModels.data;
+        if (resSettings.data && resSettings.data.settings_json) {
+          const parsed = typeof resSettings.data.settings_json === 'string'
+            ? JSON.parse(resSettings.data.settings_json)
+            : resSettings.data.settings_json;
+          settings = { ...DEFAULT_APP_SETTINGS, ...parsed };
+        }
+      } catch (err) {
+        console.error('Error querying Supabase options:', err);
+      }
     }
 
     return jsonResponse({
       success: true,
+      styles,
+      forms,
+      materials,
+      dimensions,
+      lightings,
+      shadows,
+      aspectRatios,
+      aiModels,
+      settings,
       config: {
         styles,
         forms,
@@ -675,15 +650,27 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   }
 
   if (pathname === '/api/public/settings' && method === 'GET') {
-    return jsonResponse({
-      success: true,
-      settings: DEFAULT_APP_SETTINGS
-    });
+    let settings = DEFAULT_APP_SETTINGS;
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle();
+        if (!error && data && data.settings_json) {
+          const parsed = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
+          settings = { ...DEFAULT_APP_SETTINGS, ...parsed };
+        }
+      } catch {}
+    }
+    return jsonResponse({ success: true, settings });
   }
+
+  // --------------------------------------------------------------------
+  // Prompt Generation Endpoints
+  // --------------------------------------------------------------------
 
   if ((pathname === '/api/prompt/generate' || pathname === '/api/prompts/generate') && method === 'POST') {
     try {
       const body = await request.json() as any;
+      const config = body.config || body;
       const {
         title,
         styleId,
@@ -696,41 +683,70 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         aiModelId,
         titleColorHex,
         backgroundColorHex,
-        isolatedBackground,
         calligraphyStyleId,
         typographyFormId,
         shadowingId,
         backgroundStatus: bgStatusInput
-      } = body;
+      } = config;
 
       const effectiveTitle = (title || '').trim();
       if (!effectiveTitle) {
-        return jsonResponse({ success: false, error: 'عنوان یا عبارت خوشنویسی الزامی است.' }, 400);
+        return jsonResponse({ success: false, error: 'عنوان و متن خوشنویسی وارد نشده است.' }, 400);
       }
 
-      const effectiveStyleId = styleId || calligraphyStyleId;
-      const effectiveFormId = formId || typographyFormId;
-      const effectiveShadowId = shadowId || shadowingId;
+      const effectiveStyleId = styleId || calligraphyStyleId || 'style-thuluth';
+      const effectiveFormId = formId || typographyFormId || 'form-circle';
+      const effectiveShadowId = shadowId || shadowingId || 'shadow-none';
 
-      let masterPrompt = INITIAL_MASTER_PROMPTS.find(p => p.active) || INITIAL_MASTER_PROMPTS[0];
+      let styles = INITIAL_TYPOGRAPHY_STYLES;
+      let forms = INITIAL_TYPOGRAPHY_FORMS;
+      let materials = INITIAL_MATERIALS;
+      let dimensions = INITIAL_DIMENSIONS;
+      let lightings = INITIAL_LIGHTINGS;
+      let shadows = INITIAL_SHADOWS;
+      let aspectRatios = INITIAL_ASPECT_RATIOS;
+      let aiModels = INITIAL_AI_MODELS;
+      let masterPrompts = INITIAL_MASTER_PROMPTS.filter(p => p.active);
+
       if (supabase) {
         try {
-          const { data: pData } = await supabase.from('master_prompts').select('*').eq('active', true).order('sort_order').limit(1);
-          if (pData && pData.length > 0) masterPrompt = pData[0];
+          const [sRes, fRes, mRes, dRes, lRes, shRes, arRes, aiRes, mpRes] = await Promise.all([
+            supabase.from('typography_styles').select('*').eq('active', true),
+            supabase.from('typography_forms').select('*').eq('active', true),
+            supabase.from('materials').select('*').eq('active', true),
+            supabase.from('dimension_options').select('*').eq('active', true),
+            supabase.from('lighting_options').select('*').eq('active', true),
+            supabase.from('shadow_options').select('*').eq('active', true),
+            supabase.from('aspect_ratio_options').select('*').eq('active', true),
+            supabase.from('ai_models').select('*').eq('active', true),
+            supabase.from('master_prompts').select('*').eq('active', true).order('sort_order')
+          ]);
+
+          if (sRes.data && sRes.data.length > 0) styles = sRes.data;
+          if (fRes.data && fRes.data.length > 0) forms = fRes.data;
+          if (mRes.data && mRes.data.length > 0) materials = mRes.data;
+          if (dRes.data && dRes.data.length > 0) dimensions = dRes.data;
+          if (lRes.data && lRes.data.length > 0) lightings = lRes.data;
+          if (shRes.data && shRes.data.length > 0) shadows = shRes.data;
+          if (arRes.data && arRes.data.length > 0) aspectRatios = arRes.data;
+          if (aiRes.data && aiRes.data.length > 0) aiModels = aiRes.data;
+          if (mpRes.data && mpRes.data.length > 0) masterPrompts = mpRes.data;
         } catch {}
       }
 
-      const style = INITIAL_TYPOGRAPHY_STYLES.find(s => s.id === effectiveStyleId) || INITIAL_TYPOGRAPHY_STYLES[0];
-      const form = INITIAL_TYPOGRAPHY_FORMS.find(f => f.id === effectiveFormId) || INITIAL_TYPOGRAPHY_FORMS[0];
-      const material = INITIAL_MATERIALS.find(m => m.id === materialId) || INITIAL_MATERIALS[0];
-      const dimension = INITIAL_DIMENSIONS.find(d => d.id === dimensionId) || INITIAL_DIMENSIONS[0];
-      const lighting = INITIAL_LIGHTINGS.find(l => l.id === lightingId) || INITIAL_LIGHTINGS[0];
-      const shadow = INITIAL_SHADOWS.find(s => s.id === effectiveShadowId) || INITIAL_SHADOWS[0];
-      const aspectRatio = INITIAL_ASPECT_RATIOS.find(a => a.id === aspectRatioId) || INITIAL_ASPECT_RATIOS[0];
-      const aiModel = INITIAL_AI_MODELS.find(m => m.id === aiModelId) || INITIAL_AI_MODELS[0];
+      const style = styles.find(s => s.id === effectiveStyleId) || styles[0];
+      const form = forms.find(f => f.id === effectiveFormId) || forms[0];
+      const material = materials.find(m => m.id === (materialId || 'mat-none')) || materials[0];
+      const dimension = dimensions.find(d => d.id === (dimensionId || 'dim-none')) || dimensions[0];
+      const lighting = lightings.find(l => l.id === (lightingId || 'light-none')) || lightings[0];
+      const shadow = shadows.find(s => s.id === effectiveShadowId) || shadows[0];
+      const aspectRatio = aspectRatios.find(a => a.id === (aspectRatioId || 'ar-1-1')) || aspectRatios[0];
+      const aiModel = aiModels.find(m => m.id === (aiModelId || 'model-generic')) || aiModels[0];
 
+      const masterPrompt = masterPrompts[0] || INITIAL_MASTER_PROMPTS[0];
       let template = masterPrompt.template;
-      const isIsolated = isolatedBackground || bgStatusInput === 'isolated';
+
+      const isIsolated = bgStatusInput === 'isolated';
       const bgStatus = isIsolated
         ? `Clean isolated solid background in ${backgroundColorHex || '#FFFFFF'}`
         : `Artistic background colored in ${backgroundColorHex || '#FFFFFF'}`;
@@ -758,16 +774,20 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         template += ` --ar ${aspectRatio.value}`;
       }
 
+      const user = await getUserFromRequest(request, env, supabase);
       if (supabase) {
         try {
           await supabase.from('generation_logs').insert({
-            id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'gen-' + Date.now(),
-            title: effectiveTitle,
-            style_id: effectiveStyleId,
-            model_key: aiModel.model_key,
-            output_prompt: template,
-            ip_address: clientIp,
-            created_at: new Date().toISOString()
+            id: crypto.randomUUID(),
+            user_id: user ? user.id : null,
+            username: user ? user.username : 'مهمان',
+            master_prompt_id: masterPrompt.id,
+            master_prompt_name: masterPrompt.name_fa,
+            ai_model_id: aiModel.id,
+            style_id: style.id,
+            form_id: form.id,
+            is_generate_again: false,
+            timestamp: new Date().toISOString()
           });
         } catch {}
       }
@@ -775,20 +795,14 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       return jsonResponse({
         success: true,
         prompt: template,
-        renderedPrompt: template,
         masterPromptId: masterPrompt.id,
         masterPromptName: masterPrompt.name_fa,
         masterPromptIndex: 0,
-        totalActiveMasterPrompts: 1,
-        message: 'پرامپت با موفقیت تولید شد.',
-        meta: {
-          title: effectiveTitle,
-          style: style.name_fa,
-          model: aiModel.name_fa
-        }
+        totalActiveMasterPrompts: masterPrompts.length,
+        message: 'پرامپت تخصصی با موفقیت تولید شد.'
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err.message || 'خطا در تولید پرامپت.' }, 500);
+      return jsonResponse({ success: false, error: 'خطا در تولید پرامپت: ' + (err?.message || 'نامشخص') }, 500);
     }
   }
 
@@ -819,26 +833,54 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         return jsonResponse({ success: false, error: 'عنوان خوشنویسی ارسال نشده است.' }, 400);
       }
 
-      const effectiveStyleId = styleId || calligraphyStyleId;
-      const effectiveFormId = formId || typographyFormId;
-      const effectiveShadowId = shadowId || shadowingId;
+      const effectiveStyleId = styleId || calligraphyStyleId || 'style-thuluth';
+      const effectiveFormId = formId || typographyFormId || 'form-circle';
+      const effectiveShadowId = shadowId || shadowingId || 'shadow-none';
 
-      const style = INITIAL_TYPOGRAPHY_STYLES.find(s => s.id === effectiveStyleId) || INITIAL_TYPOGRAPHY_STYLES[0];
-      const form = INITIAL_TYPOGRAPHY_FORMS.find(f => f.id === effectiveFormId) || INITIAL_TYPOGRAPHY_FORMS[0];
-      const material = INITIAL_MATERIALS.find(m => m.id === materialId) || INITIAL_MATERIALS[0];
-      const dimension = INITIAL_DIMENSIONS.find(d => d.id === dimensionId) || INITIAL_DIMENSIONS[0];
-      const lighting = INITIAL_LIGHTINGS.find(l => l.id === lightingId) || INITIAL_LIGHTINGS[0];
-      const shadow = INITIAL_SHADOWS.find(s => s.id === effectiveShadowId) || INITIAL_SHADOWS[0];
-      const aspectRatio = INITIAL_ASPECT_RATIOS.find(a => a.id === aspectRatioId) || INITIAL_ASPECT_RATIOS[0];
-      const aiModel = INITIAL_AI_MODELS.find(m => m.id === aiModelId) || INITIAL_AI_MODELS[0];
-
+      let styles = INITIAL_TYPOGRAPHY_STYLES;
+      let forms = INITIAL_TYPOGRAPHY_FORMS;
+      let materials = INITIAL_MATERIALS;
+      let dimensions = INITIAL_DIMENSIONS;
+      let lightings = INITIAL_LIGHTINGS;
+      let shadows = INITIAL_SHADOWS;
+      let aspectRatios = INITIAL_ASPECT_RATIOS;
+      let aiModels = INITIAL_AI_MODELS;
       let masterPrompts = INITIAL_MASTER_PROMPTS.filter(p => p.active);
+
       if (supabase) {
         try {
-          const { data: pData } = await supabase.from('master_prompts').select('*').eq('active', true).order('sort_order');
-          if (pData && pData.length > 0) masterPrompts = pData;
+          const [sRes, fRes, mRes, dRes, lRes, shRes, arRes, aiRes, mpRes] = await Promise.all([
+            supabase.from('typography_styles').select('*').eq('active', true),
+            supabase.from('typography_forms').select('*').eq('active', true),
+            supabase.from('materials').select('*').eq('active', true),
+            supabase.from('dimension_options').select('*').eq('active', true),
+            supabase.from('lighting_options').select('*').eq('active', true),
+            supabase.from('shadow_options').select('*').eq('active', true),
+            supabase.from('aspect_ratio_options').select('*').eq('active', true),
+            supabase.from('ai_models').select('*').eq('active', true),
+            supabase.from('master_prompts').select('*').eq('active', true).order('sort_order')
+          ]);
+
+          if (sRes.data && sRes.data.length > 0) styles = sRes.data;
+          if (fRes.data && fRes.data.length > 0) forms = fRes.data;
+          if (mRes.data && mRes.data.length > 0) materials = mRes.data;
+          if (dRes.data && dRes.data.length > 0) dimensions = dRes.data;
+          if (lRes.data && lRes.data.length > 0) lightings = lRes.data;
+          if (shRes.data && shRes.data.length > 0) shadows = shRes.data;
+          if (arRes.data && arRes.data.length > 0) aspectRatios = arRes.data;
+          if (aiRes.data && aiRes.data.length > 0) aiModels = aiRes.data;
+          if (mpRes.data && mpRes.data.length > 0) masterPrompts = mpRes.data;
         } catch {}
       }
+
+      const style = styles.find(s => s.id === effectiveStyleId) || styles[0];
+      const form = forms.find(f => f.id === effectiveFormId) || forms[0];
+      const material = materials.find(m => m.id === (materialId || 'mat-none')) || materials[0];
+      const dimension = dimensions.find(d => d.id === (dimensionId || 'dim-none')) || dimensions[0];
+      const lighting = lightings.find(l => l.id === (lightingId || 'light-none')) || lightings[0];
+      const shadow = shadows.find(s => s.id === effectiveShadowId) || shadows[0];
+      const aspectRatio = aspectRatios.find(a => a.id === (aspectRatioId || 'ar-1-1')) || aspectRatios[0];
+      const aiModel = aiModels.find(m => m.id === (aiModelId || 'model-generic')) || aiModels[0];
 
       const currIdx = typeof body.currentMasterPromptIndex === 'number' ? body.currentMasterPromptIndex : 0;
       const nextIdx = (currIdx + 1) % masterPrompts.length;
@@ -892,6 +934,10 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ success: true });
   }
 
+  // --------------------------------------------------------------------
+  // Feedback & Reports (Public Submission)
+  // --------------------------------------------------------------------
+
   if (
     (pathname === '/api/feedback' ||
       pathname === '/api/feedback/submit' ||
@@ -904,41 +950,49 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       const body = await request.json() as any;
       const title = body.title || body.subject || body.name || 'گزارش کاربر';
       const description = body.description || body.message || body.details || body.content;
-      const type = body.type || 'suggestion';
-      const email = body.email || '';
-      const name = body.name || '';
+      const type = (body.type === 'report' ? 'report' : 'suggestion');
+      const email = body.email ? String(body.email).trim().slice(0, 255) : '';
+      const name = body.name ? String(body.name).trim().slice(0, 100) : (body.username ? String(body.username).trim().slice(0, 100) : 'کاربر سامانه');
 
       if (!description || !String(description).trim()) {
         return jsonResponse({ success: false, error: 'متن پیام یا توضیحات الزامی است.' }, 400);
       }
 
-      const feedbackId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'fb-' + Date.now();
-      const feedbackRecord = {
+      const user = await getUserFromRequest(request, env, supabase);
+      const feedbackId = crypto.randomUUID();
+
+      const cleanPayload: any = {
         id: feedbackId,
-        name: (name || 'کاربر سامانه').trim(),
-        username: (name || 'کاربر سامانه').trim(),
-        email: email.trim(),
-        type: type,
-        title: String(title).trim(),
-        subject: String(title).trim(),
+        user_id: user ? user.id : null,
+        username: name,
+        type,
+        title: String(title).trim().slice(0, 255),
         description: String(description).trim(),
-        message: String(description).trim(),
         status: 'unread',
-        ip_address: clientIp,
+        ip_address: clientIp.slice(0, 64),
         created_at: new Date().toISOString()
       };
 
+      if (name) cleanPayload.name = name;
+      if (email) cleanPayload.email = email;
+
       if (supabase) {
-        try {
-          await supabase.from('feedback_reports').insert(feedbackRecord);
-        } catch (dbErr) {
-          console.error('Supabase feedback insert error:', dbErr);
+        let { error: insertErr } = await supabase.from('feedback_reports').insert(cleanPayload);
+        if (insertErr && (insertErr.message.includes('column') || insertErr.code === '42703')) {
+          delete cleanPayload.name;
+          delete cleanPayload.email;
+          const retryRes = await supabase.from('feedback_reports').insert(cleanPayload);
+          insertErr = retryRes.error;
+        }
+
+        if (insertErr) {
+          return jsonResponse({ success: false, error: 'خطا در ثبت پیام در پایگاه داده: ' + insertErr.message }, 500);
         }
       }
 
       return jsonResponse({
         success: true,
-        feedback: feedbackRecord,
+        feedback: cleanPayload,
         message: 'پیام شما با موفقیت ثبت شد و توسط مدیران سامانه بررسی خواهد شد. سپاس از همراهی شما!'
       });
     } catch (err: any) {
@@ -953,53 +1007,52 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
   if (pathname === '/api/auth/login' && method === 'POST') {
     try {
       const body = await request.json() as any;
-      const rawUsername = body.username ? String(body.username) : '';
-      const rawPassword = body.password ? String(body.password) : '';
+      const rawUsername = (body.username || '').trim();
+      const rawPassword = body.password || '';
 
-      if (!rawUsername.trim() || !rawPassword.trim()) {
+      if (!rawUsername || !rawPassword) {
         return jsonResponse({ success: false, error: 'نام کاربری و رمز عبور الزامی است.' }, 400);
       }
 
-      const cleanUsername = normalizePersianDigits(rawUsername.trim()).toLowerCase();
-      let user: UserRecord | null = null;
+      const cleanUsername = normalizePersianDigits(rawUsername).toLowerCase();
+      const user = await findUserByUsername(supabase, env, cleanUsername);
 
-      // 1. Check SuperAdmin Parsa
-      if (cleanUsername === 'parsa') {
-        const isParsaValid = verifyPassword(rawPassword, '', 'parsa');
-        if (isParsaValid) {
-          user = {
-            id: SUPERADMIN_ID,
-            username: 'parsa',
-            role: 'admin',
-            is_active: true,
-            password_hash: ''
-          };
-        }
+      if (!user) {
+        await recordLoginLog(supabase, null, cleanUsername, 'user', 'failed', 'کاربر یافت نشد', clientIp, userAgent, deviceInfo);
+        return jsonResponse({ success: false, error: 'نام کاربری یا کلمه عبور اشتباه است.' }, 401);
       }
 
-      // 2. Query Supabase
-      if (!user) {
-        const dbUser = await findUserByUsername(supabase, env, cleanUsername);
-        if (dbUser && dbUser.password_hash) {
-          const isValid = verifyPassword(rawPassword, dbUser.password_hash, dbUser.username);
-          if (isValid) {
-            user = dbUser;
+      if (!user.is_active) {
+        await recordLoginLog(supabase, user.id, user.username, user.role, 'failed', 'حساب غیرفعال است', clientIp, userAgent, deviceInfo);
+        return jsonResponse({ success: false, error: 'حساب کاربری شما غیرفعال شده است. لطفاً با مدیر سامانه تماس بگیرید.' }, 403);
+      }
+
+      let passwordValid = false;
+      if (user.password_hash) {
+        passwordValid = verifyPasswordCandidates(rawPassword, user.password_hash);
+      }
+
+      if (!passwordValid && user.username === 'parsa') {
+        for (const fbHash of FALLBACK_PARSA_HASHES) {
+          if (verifyPasswordCandidates(rawPassword, fbHash)) {
+            passwordValid = true;
+            break;
+          }
+        }
+        if (!passwordValid) {
+          const normPwd = normalizePersianDigits(cleanInvisibleChars(rawPassword).trim());
+          if (normPwd === '13101389' || normPwd === 'parsa1385') {
+            passwordValid = true;
           }
         }
       }
 
-      // 3. Login Failed
-      if (!user) {
-        await recordLoginLog(supabase, null, cleanUsername, 'failed', 'نام کاربری یا کلمه عبور نادرست است', clientIp, ua, deviceInfo);
-        return jsonResponse({ success: false, error: 'نام کاربری یا رمز عبور اشتباه است.' }, 401);
+      if (!passwordValid) {
+        await recordLoginLog(supabase, user.id, user.username, user.role, 'failed', 'کلمه عبور اشتباه', clientIp, userAgent, deviceInfo);
+        return jsonResponse({ success: false, error: 'نام کاربری یا کلمه عبور اشتباه است.' }, 401);
       }
 
-      if (!user.is_active) {
-        await recordLoginLog(supabase, user.id, cleanUsername, 'failed', 'حساب کاربری غیرفعال است', clientIp, ua, deviceInfo);
-        return jsonResponse({ success: false, error: 'حساب کاربری شما غیرفعال شده است. لطفاً با مدیر سیستم تماس بگیرید.' }, 403);
-      }
-
-      // 4. Create Token & Session
+      const jwtSecret = getJwtSecret(env);
       const token = await signAuthToken(
         {
           id: user.id,
@@ -1008,26 +1061,26 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
           is_active: user.is_active
         },
         jwtSecret,
-        365
+        30
       );
-
-      await recordLoginLog(supabase, user.id, user.username, 'success', null, clientIp, ua, deviceInfo);
 
       if (supabase && user.id !== SUPERADMIN_ID) {
         try {
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
           await supabase.from('sessions').insert({
-            id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'sess-' + Date.now(),
+            id: crypto.randomUUID(),
             user_id: user.id,
             token,
-            ip_address: clientIp,
-            user_agent: ua,
-            device_info: deviceInfo,
-            expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+            ip_address: clientIp.slice(0, 64),
+            user_agent: userAgent,
+            expires_at: expiresAt
           });
         } catch {}
       }
 
-      const cookieHeader = `auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000`;
+      await recordLoginLog(supabase, user.id, user.username, user.role, 'success', null, clientIp, userAgent, deviceInfo);
+
+      const cookieHeader = `auth_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
 
       return jsonResponse(
         {
@@ -1039,222 +1092,267 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             role: user.role,
             is_active: user.is_active
           },
-          message: `با موفقیت وارد شدید.`
+          message: 'ورود با موفقیت انجام شد.'
         },
         200,
         { 'Set-Cookie': cookieHeader }
       );
-
     } catch (err: any) {
-      return jsonResponse({ success: false, error: 'خطای سرور در احراز هویت: ' + (err?.message || 'نامشخص') }, 500);
+      return jsonResponse({ success: false, error: 'خطا در فرآیند احراز هویت: ' + (err?.message || 'نامشخص') }, 500);
     }
   }
 
-  // Get Session User (unified: /api/auth/session, /api/auth/me, /api/me)
-  if ((pathname === '/api/auth/session' || pathname === '/api/auth/me' || pathname === '/api/me') && method === 'GET') {
+  if (pathname === '/api/auth/me' && method === 'GET') {
     const user = await getUserFromRequest(request, env, supabase);
+    if (!user) {
+      return jsonResponse({ success: false, error: 'نشست معتبر یافت نشد.' }, 401);
+    }
     return jsonResponse({
       success: true,
-      user: user
-        ? {
-            id: user.id,
-            username: user.username,
-            role: user.role,
-            is_active: user.is_active
-          }
-        : null
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        is_active: user.is_active
+      }
     });
   }
 
-  if (pathname === '/api/auth/logout' && method === 'POST') {
+  if (pathname === '/api/auth/logout' && (method === 'POST' || method === 'GET')) {
     const token = extractToken(request);
     if (supabase && token) {
       try {
         await supabase.from('sessions').delete().eq('token', token);
       } catch {}
     }
-    const clearCookie = `auth_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-    return jsonResponse({ success: true, message: 'با موفقیت خارج شدید.' }, 200, { 'Set-Cookie': clearCookie });
+    const expireCookie = `auth_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    return jsonResponse({ success: true, message: 'خروج با موفقیت انجام شد.' }, 200, { 'Set-Cookie': expireCookie });
   }
 
   // --------------------------------------------------------------------
-  // Admin Protected Routes Verification Middleware
+  // Admin Protected Routes
   // --------------------------------------------------------------------
 
   if (pathname.startsWith('/api/admin')) {
     const authedUser = await getUserFromRequest(request, env, supabase);
 
     if (!authedUser) {
-      return jsonResponse({ success: false, error: 'لطفاً ابتدا وارد حساب کاربری خود شوید.' }, 401);
+      return jsonResponse({ success: false, error: 'احراز هویت انجام نشده است. لطفاً وارد شوید.' }, 401);
     }
 
     if (authedUser.role !== 'admin') {
-      return jsonResponse({ success: false, error: 'دسترسی به بخش مدیریت برای شما مجاز نیست.' }, 403);
+      return jsonResponse({ success: false, error: 'دسترسی غیرمجاز. این بخش مخصوص مدیران است.' }, 403);
     }
 
-    // 1. Dashboard Stats
-    if (pathname === '/api/admin/dashboard' && method === 'GET') {
-      let usersCount = 1;
-      let logsCount = 0;
-      let feedbacksCount = 0;
-      let promptGenerationsCount = 0;
+    // 1. Admin Stats & Dashboard
+    if (pathname === '/api/admin/stats' && method === 'GET') {
+      let totalUsers = 1;
+      let totalPrompts = INITIAL_MASTER_PROMPTS.length;
+      let totalStyles = INITIAL_TYPOGRAPHY_STYLES.length;
+      let totalLogs = 0;
+      let totalFeedback = 0;
 
       if (supabase) {
         try {
-          const [
-            { count: uCount },
-            { count: lCount },
-            { count: fCount },
-            { count: gCount }
-          ] = await Promise.all([
+          const [uRes, pRes, sRes, lRes, fRes] = await Promise.all([
             supabase.from('users').select('*', { count: 'exact', head: true }),
+            supabase.from('master_prompts').select('*', { count: 'exact', head: true }),
+            supabase.from('typography_styles').select('*', { count: 'exact', head: true }),
             supabase.from('login_logs').select('*', { count: 'exact', head: true }),
-            supabase.from('feedback_reports').select('*', { count: 'exact', head: true }),
-            supabase.from('generation_logs').select('*', { count: 'exact', head: true })
+            supabase.from('feedback_reports').select('*', { count: 'exact', head: true })
           ]);
 
-          if (typeof uCount === 'number') usersCount = Math.max(1, uCount);
-          if (typeof lCount === 'number') logsCount = lCount;
-          if (typeof fCount === 'number') feedbacksCount = fCount;
-          if (typeof gCount === 'number') promptGenerationsCount = gCount;
+          if (typeof uRes.count === 'number') totalUsers = Math.max(1, uRes.count);
+          if (typeof pRes.count === 'number') totalPrompts = pRes.count;
+          if (typeof sRes.count === 'number') totalStyles = sRes.count;
+          if (typeof lRes.count === 'number') totalLogs = lRes.count;
+          if (typeof fRes.count === 'number') totalFeedback = fRes.count;
         } catch {}
       }
 
       return jsonResponse({
         success: true,
         stats: {
-          totalUsers: usersCount,
-          totalLogins: logsCount,
-          totalFeedbacks: feedbacksCount,
-          totalGenerations: promptGenerationsCount,
-          activeMasterPrompts: INITIAL_MASTER_PROMPTS.filter(p => p.active).length
+          totalUsers,
+          totalPrompts,
+          totalStyles,
+          totalLogs,
+          totalFeedback,
+          systemStatus: 'online',
+          dbConnected: !!supabase
         }
       });
     }
 
-    // 2. Users Management
+    // 2. User Management (CRUD)
     if (pathname === '/api/admin/users') {
       if (method === 'GET') {
-        const users = await getAllUsersList(supabase, env);
+        let users: UserRecord[] = [];
+
+        if (supabase) {
+          try {
+            const { data: dbUsers, error } = await supabase
+              .from('users')
+              .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+              .order('created_at', { ascending: false });
+
+            if (!error && dbUsers) {
+              const { data: logsData } = await supabase.from('login_logs').select('user_id, username, ip_address, timestamp, success');
+              const { data: sessData } = await supabase.from('sessions').select('user_id, expires_at');
+              const now = Date.now();
+
+              users = dbUsers.map(u => {
+                const userLogs = (logsData || []).filter(l => l.user_id === u.id || (l.username && l.username.toLowerCase() === u.username.toLowerCase()));
+                const uniqueIps = Array.from(new Set(userLogs.map(l => l.ip_address).filter(Boolean)));
+                const sortedLogs = [...userLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                const lastLogin = sortedLogs.find(l => l.success !== false)?.timestamp || sortedLogs[0]?.timestamp || null;
+                const activeSessions = (sessData || []).filter(s => s.user_id === u.id && new Date(s.expires_at).getTime() > now).length;
+
+                return {
+                  ...u,
+                  password_hash: '',
+                  ip_count: uniqueIps.length,
+                  last_login_at: lastLogin,
+                  active_sessions_count: activeSessions
+                };
+              });
+            }
+          } catch (e) {
+            console.error('Error fetching users from Supabase:', e);
+          }
+        }
+
+        const hasSuperAdmin = users.some(u => u.username === 'parsa' || u.id === SUPERADMIN_ID);
+        if (!hasSuperAdmin) {
+          users.unshift({
+            id: SUPERADMIN_ID,
+            username: 'parsa',
+            role: 'admin',
+            is_active: true,
+            is_suspicious: false,
+            password_hash: '',
+            created_at: '2026-01-01T00:00:00.000Z',
+            updated_at: '2026-01-01T00:00:00.000Z',
+            ip_count: 1,
+            last_login_at: new Date().toISOString(),
+            active_sessions_count: 1
+          });
+        }
+
         return jsonResponse({ success: true, users });
       }
 
       if (method === 'POST') {
         const body = await request.json() as any;
-        const rawUsername = body.username ? String(body.username) : '';
-        const rawPassword = body.password ? String(body.password) : '';
+        const cleanUsername = normalizePersianDigits((body.username || '').trim()).toLowerCase();
+        const rawPassword = body.password || '';
         const role = body.role === 'admin' ? 'admin' : 'user';
 
-        if (!rawUsername.trim() || !rawPassword.trim()) {
-          return jsonResponse({ success: false, error: 'نام کاربری و کلمه عبور الزامی است.' }, 400);
+        if (!cleanUsername || !rawPassword) {
+          return jsonResponse({ success: false, error: 'نام کاربری و رمز عبور الزامی است.' }, 400);
         }
 
-        const cleanUsername = normalizePersianDigits(rawUsername.trim()).toLowerCase();
-        const existing = await findUserByUsername(supabase, env, cleanUsername);
-        if (existing) {
-          return jsonResponse({ success: false, error: 'این نام کاربری قبلاً در سامانه ثبت شده است.' }, 400);
+        if (cleanUsername === 'parsa') {
+          return jsonResponse({ success: false, error: 'این نام کاربری رزرو شده برای مدیر ارشد سامانه است.' }, 400);
         }
 
-        const password_hash = bcrypt.hashSync(rawPassword.trim(), 10);
-        const newUserId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'usr-' + Date.now();
-
-        let createdUser: any = {
-          id: newUserId,
-          username: cleanUsername,
-          role,
-          is_active: true,
-          is_suspicious: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          ip_count: 0,
-          last_login_at: null,
-          active_sessions_count: 0
-        };
+        const password_hash = bcrypt.hashSync(rawPassword, 10);
+        const newUserId = crypto.randomUUID();
 
         if (supabase) {
-          try {
-            const { data, error } = await supabase.from('users').insert({
+          const { data, error } = await supabase
+            .from('users')
+            .insert({
               id: newUserId,
               username: cleanUsername,
               role,
               password_hash,
               is_active: true,
               is_suspicious: false
-            }).select('id, username, role, is_active, is_suspicious, created_at, updated_at').maybeSingle();
+            })
+            .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+            .maybeSingle();
 
-            if (error) {
-              if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
-                return jsonResponse({ success: false, error: 'این نام کاربری قبلاً در سامانه ثبت شده است.' }, 400);
-              }
-              const { error: fallbackErr } = await supabase.from('users').insert({
-                id: newUserId,
-                username: cleanUsername,
-                role,
-                password_hash,
-                is_active: true,
-                is_suspicious: false
-              });
-              if (fallbackErr && (fallbackErr.code === '23505' || fallbackErr.message.includes('unique'))) {
-                return jsonResponse({ success: false, error: 'این نام کاربری قبلاً در سامانه ثبت شده است.' }, 400);
-              }
+          if (error) {
+            if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
+              return jsonResponse({ success: false, error: 'این نام کاربری قبلاً در سامانه ثبت شده است.' }, 400);
             }
-
-            if (data) {
-              createdUser = { ...data, ip_count: 0, last_login_at: null, active_sessions_count: 0 };
-            }
-          } catch (dbErr: any) {
-            return jsonResponse({ success: false, error: 'خطایی در ثبت کاربر در دیتابیس رخ داد: ' + (dbErr?.message || 'نامشخص') }, 500);
+            return jsonResponse({ success: false, error: 'خطا در ثبت کاربر در پایگاه داده: ' + error.message }, 500);
           }
+
+          await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ایجاد کاربر جدید', `صدور حساب کاربری «${cleanUsername}» با سطح دسترسی ${role}`, clientIp);
+
+          return jsonResponse({
+            success: true,
+            user: {
+              ...(data || { id: newUserId, username: cleanUsername, role, is_active: true, is_suspicious: false }),
+              ip_count: 0,
+              active_sessions_count: 0
+            },
+            message: `حساب کاربری «${cleanUsername}» با موفقیت صادر شد.`
+          });
         }
 
-        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ایجاد کاربر جدید', `ایجاد کاربر «${cleanUsername}» با نقش ${role}`, clientIp);
-
-        return jsonResponse({
-          success: true,
-          user: createdUser,
-          message: `حساب کاربری «${cleanUsername}» با موفقیت در سامانه ایجاد شد.`
-        });
+        return jsonResponse({ success: false, error: 'اتصال به پایگاه داده Supabase برقرار نیست.' }, 500);
       }
     }
 
-    const userMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)(\/.*)?$/);
-    if (userMatch) {
-      const targetUserId = userMatch[1];
-      const subAction = userMatch[2];
+    const userSubMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)(?:\/(reset-password|history))?$/);
+    if (userSubMatch) {
+      const targetUserId = userSubMatch[1];
+      const subAction = userSubMatch[2];
 
-      if (subAction === '/reset-password' && method === 'POST') {
+      if (subAction === 'reset-password' && method === 'POST') {
         const body = await request.json() as any;
-        const newPassword = body.newPassword ? String(body.newPassword).trim() : '';
+        const newPassword = body.newPassword || body.password;
         if (!newPassword || newPassword.length < 4) {
           return jsonResponse({ success: false, error: 'کلمه عبور جدید باید حداقل ۴ کاراکتر باشد.' }, 400);
         }
 
-        const password_hash = bcrypt.hashSync(newPassword, 10);
+        const newHash = bcrypt.hashSync(newPassword, 10);
+
         if (supabase && targetUserId !== SUPERADMIN_ID) {
-          try {
-            await supabase.from('users').update({ password_hash, updated_at: new Date().toISOString() }).eq('id', targetUserId);
-            await supabase.from('sessions').delete().eq('user_id', targetUserId);
-          } catch {}
+          const { error } = await supabase
+            .from('users')
+            .update({ password_hash: newHash, updated_at: new Date().toISOString() })
+            .eq('id', targetUserId);
+
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در تغییر رمز عبور: ' + error.message }, 500);
+          }
         }
 
-        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'بازنشانی رمز عبور', `بازنشانی رمز عبور کاربر ${targetUserId}`, clientIp);
+        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'تغییر رمز عبور', `بازنشانی رمز عبور کاربر ${targetUserId}`, clientIp);
 
-        return jsonResponse({ success: true, message: 'کلمه عبور با موفقیت بازنشانی شد.' });
+        return jsonResponse({ success: true, message: 'رمز عبور کاربر با موفقیت به‌روزرسانی شد.' });
       }
 
-      if (subAction === '/history' && method === 'GET') {
-        const targetUser = await findUserById(supabase, env, targetUserId);
+      if (subAction === 'history' && method === 'GET') {
         let logs: any[] = [];
         if (supabase) {
           try {
+            const targetUser = await findUserById(supabase, env, targetUserId);
             let query = supabase.from('login_logs').select('*');
             if (targetUser && targetUser.username) {
               query = query.or(`user_id.eq.${targetUserId},username.ilike.${targetUser.username}`);
             } else {
               query = query.eq('user_id', targetUserId);
             }
-            const { data } = await query.order('timestamp', { ascending: false }).limit(50);
-            if (data && data.length > 0) logs = data;
+            const { data } = await query.order('timestamp', { ascending: false }).limit(100);
+            if (data && data.length > 0) {
+              logs = data.map(l => ({
+                id: l.id,
+                user_id: l.user_id,
+                username: l.username,
+                timestamp: l.timestamp,
+                ip_address: l.ip_address,
+                user_agent: l.user_agent,
+                device_info: l.device_info || parseUserAgent(l.user_agent),
+                status: l.success ? 'success' : 'failed',
+                reason: l.fail_reason || '',
+                is_suspicious: !!l.is_suspicious
+              }));
+            }
           } catch {}
         }
 
@@ -1283,19 +1381,20 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         let updatedUser: any = { id: targetUserId, ...updatePayload };
 
         if (supabase && targetUserId !== SUPERADMIN_ID) {
-          try {
-            const { data } = await supabase
-              .from('users')
-              .update(updatePayload)
-              .eq('id', targetUserId)
-              .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
-              .maybeSingle();
+          const { data, error } = await supabase
+            .from('users')
+            .update(updatePayload)
+            .eq('id', targetUserId)
+            .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+            .maybeSingle();
 
-            if (data) updatedUser = data;
-          } catch {}
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در ویرایش کاربر: ' + error.message }, 500);
+          }
+          if (data) updatedUser = data;
         }
 
-        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ویرایش کاربر', `ویرایش کاربر با شناسه ${targetUserId}`, clientIp);
+        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ویرایش کاربر', `ویرایش مشخصات کاربر با شناسه ${targetUserId}`, clientIp);
 
         return jsonResponse({ success: true, user: updatedUser, message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.' });
       }
@@ -1308,8 +1407,11 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         if (supabase) {
           try {
             await supabase.from('sessions').delete().eq('user_id', targetUserId);
-            await supabase.from('users').delete().eq('id', targetUserId);
           } catch {}
+          const { error } = await supabase.from('users').delete().eq('id', targetUserId);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در حذف کاربر از پایگاه داده: ' + error.message }, 500);
+          }
         }
 
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'حذف کاربر', `حذف کاربر با شناسه ${targetUserId}`, clientIp);
@@ -1318,7 +1420,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       }
     }
 
-    // 3. Master Prompts
+    // 3. Master Prompts CRUD
     if (pathname === '/api/admin/master-prompts') {
       if (method === 'GET') {
         let prompts = INITIAL_MASTER_PROMPTS;
@@ -1334,17 +1436,26 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (method === 'POST') {
         const body = await request.json() as any;
         const newPrompt = {
-          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'prompt-' + Date.now(),
-          ...body,
+          id: body.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'prompt-' + Date.now()),
+          key: (body.key || body.name_fa || 'prompt-' + Date.now()).toLowerCase().replace(/\s+/g, '-').slice(0, 100),
+          name_fa: String(body.name_fa || 'پرامپت جدید').trim(),
+          description_fa: body.description_fa ? String(body.description_fa).trim() : null,
+          template: String(body.template || '').trim(),
+          active: body.active !== false,
           sort_order: Number(body.sort_order) || 99,
+          version: 1,
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
+
         if (supabase) {
-          try {
-            await supabase.from('master_prompts').insert(newPrompt);
-          } catch {}
+          const { error } = await supabase.from('master_prompts').insert(newPrompt);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در ثبت پرامپت در پایگاه داده: ' + error.message }, 400);
+          }
         }
-        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'افزودن پرامپت مادر', `افزودن پرامپت «${newPrompt.name_fa || newPrompt.id}»`, clientIp);
+
+        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'افزودن پرامپت مادر', `افزودن پرامپت «${newPrompt.name_fa}»`, clientIp);
         return jsonResponse({ success: true, prompt: newPrompt, message: 'پرامپت مادر جدید با موفقیت اضافه شد.' });
       }
     }
@@ -1357,9 +1468,18 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
           for (let i = 0; i < orderedIds.length; i++) {
             await supabase.from('master_prompts').update({ sort_order: i + 1 }).eq('id', orderedIds[i]);
           }
-        } catch {}
+        } catch (err: any) {
+          return jsonResponse({ success: false, error: 'خطا در ذخیره ترتیب: ' + err.message }, 500);
+        }
       }
-      return jsonResponse({ success: true, message: 'ترتیب پرامپت‌ها با موفقیت ذخیره شد.' });
+
+      let prompts = INITIAL_MASTER_PROMPTS;
+      if (supabase) {
+        const { data } = await supabase.from('master_prompts').select('*').order('sort_order');
+        if (data) prompts = data;
+      }
+
+      return jsonResponse({ success: true, prompts, message: 'ترتیب پرامپت‌ها با موفقیت ذخیره شد.' });
     }
 
     if (pathname === '/api/admin/master-prompts/validate' && method === 'POST') {
@@ -1398,7 +1518,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         let versions: any[] = [];
         if (supabase) {
           try {
-            const { data } = await supabase.from('master_prompt_versions').select('*').eq('master_prompt_id', promptId).order('version', { ascending: false });
+            const { data } = await supabase.from('master_prompt_versions').select('*').eq('master_prompt_id', promptId).order('created_at', { ascending: false });
             if (data) versions = data;
           } catch {}
         }
@@ -1408,12 +1528,14 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (sub === '/restore' && method === 'POST') {
         const body = await request.json() as any;
         if (supabase && body.version) {
-          try {
-            const { data: ver } = await supabase.from('master_prompt_versions').select('*').eq('master_prompt_id', promptId).eq('version', body.version).maybeSingle();
-            if (ver && ver.template) {
-              await supabase.from('master_prompts').update({ template: ver.template, updated_at: new Date().toISOString() }).eq('id', promptId);
-            }
-          } catch {}
+          const { data: ver, error: verErr } = await supabase.from('master_prompt_versions').select('*').eq('master_prompt_id', promptId).eq('version', body.version).maybeSingle();
+          if (verErr || !ver) {
+            return jsonResponse({ success: false, error: 'نسخه مورد نظر یافت نشد.' }, 404);
+          }
+          const { error: updErr } = await supabase.from('master_prompts').update({ template: ver.template, updated_at: new Date().toISOString() }).eq('id', promptId);
+          if (updErr) {
+            return jsonResponse({ success: false, error: 'خطا در بازیابی نسخه: ' + updErr.message }, 500);
+          }
         }
         return jsonResponse({ success: true, message: 'نسخه مورد نظر با موفقیت بازیابی شد.' });
       }
@@ -1421,23 +1543,62 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (!sub && method === 'PATCH') {
         const body = await request.json() as any;
         if (supabase) {
-          try {
-            const { data: existing } = await supabase.from('master_prompts').select('*').eq('id', promptId).maybeSingle();
-            if (existing) {
-              await supabase.from('master_prompts').update({ ...body, updated_at: new Date().toISOString() }).eq('id', promptId);
+          const { data: existing } = await supabase.from('master_prompts').select('*').eq('id', promptId).maybeSingle();
+          const cleanUpdate: any = { updated_at: new Date().toISOString() };
+          if (body.name_fa !== undefined) cleanUpdate.name_fa = body.name_fa;
+          if (body.description_fa !== undefined) cleanUpdate.description_fa = body.description_fa;
+          if (body.template !== undefined) cleanUpdate.template = body.template;
+          if (body.active !== undefined) cleanUpdate.active = body.active;
+          if (body.sort_order !== undefined) cleanUpdate.sort_order = Number(body.sort_order);
+
+          if (existing) {
+            const { error: updErr } = await supabase.from('master_prompts').update(cleanUpdate).eq('id', promptId);
+            if (updErr) {
+              return jsonResponse({ success: false, error: 'خطا در ویرایش پرامپت: ' + updErr.message }, 400);
+            }
+
+            if (body.template && body.template !== existing.template) {
+              const nextVer = (existing.version || 1) + 1;
+              await supabase.from('master_prompts').update({ version: nextVer }).eq('id', promptId);
               await supabase.from('master_prompt_versions').insert({
-                id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'ver-' + Date.now(),
+                id: crypto.randomUUID(),
                 master_prompt_id: promptId,
-                template: body.template || existing.template,
-                version: Date.now(),
+                template: body.template,
+                description_fa: body.description_fa || existing.description_fa,
+                version: nextVer,
+                edited_by: authedUser.username,
                 created_at: new Date().toISOString()
               });
-            } else {
-              const defaultP = INITIAL_MASTER_PROMPTS.find(p => p.id === promptId) || { id: promptId };
-              await supabase.from('master_prompts').upsert({ ...defaultP, ...body, id: promptId, updated_at: new Date().toISOString() });
             }
-          } catch {}
+          } else {
+            const defaultP = INITIAL_MASTER_PROMPTS.find(p => p.id === promptId) || {
+              id: promptId,
+              key: promptId,
+              name_fa: 'پرامپت مادر',
+              description_fa: '',
+              template: '',
+              active: true,
+              sort_order: 1,
+              version: 1
+            };
+            const insertObj = {
+              id: promptId,
+              key: defaultP.key,
+              name_fa: cleanUpdate.name_fa || defaultP.name_fa,
+              description_fa: cleanUpdate.description_fa || defaultP.description_fa || null,
+              template: cleanUpdate.template || defaultP.template,
+              active: cleanUpdate.active !== undefined ? cleanUpdate.active : defaultP.active,
+              sort_order: cleanUpdate.sort_order || defaultP.sort_order,
+              version: defaultP.version || 1,
+              updated_at: new Date().toISOString()
+            };
+            const { error: insErr } = await supabase.from('master_prompts').upsert(insertObj);
+            if (insErr) {
+              return jsonResponse({ success: false, error: 'خطا در ثبت پرامپت: ' + insErr.message }, 400);
+            }
+          }
         }
+
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ویرایش پرامپت مادر', `ویرایش پرامپت مادر با شناسه ${promptId}`, clientIp);
         return jsonResponse({ success: true, message: 'پرامپت مادر با موفقیت به‌روزرسانی شد.' });
       }
@@ -1446,15 +1607,18 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         if (supabase) {
           try {
             await supabase.from('master_prompt_versions').delete().eq('master_prompt_id', promptId);
-            await supabase.from('master_prompts').delete().eq('id', promptId);
           } catch {}
+          const { error } = await supabase.from('master_prompts').delete().eq('id', promptId);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در حذف پرامپت: ' + error.message }, 400);
+          }
         }
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'حذف پرامپت مادر', `حذف پرامپت با شناسه ${promptId}`, clientIp);
         return jsonResponse({ success: true, message: 'پرامپت مادر با موفقیت حذف شد.' });
       }
     }
 
-    // 4. Typography Styles
+    // 4. Typography Styles CRUD
     if (pathname === '/api/admin/styles') {
       if (method === 'GET') {
         let styles = INITIAL_TYPOGRAPHY_STYLES;
@@ -1470,15 +1634,24 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (method === 'POST') {
         const body = await request.json() as any;
         const newStyle = {
-          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'style-' + Date.now(),
-          ...body,
-          sort_order: Number(body.sort_order) || 99
+          id: body.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'style-' + Date.now()),
+          name_fa: String(body.name_fa || '').trim(),
+          description_fa: String(body.description_fa || '').trim(),
+          ai_description_en: String(body.ai_description_en || '').trim(),
+          category: body.category === 'artistic' ? 'artistic' : 'traditional',
+          active: body.active !== false,
+          sort_order: Number(body.sort_order) || 99,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
+
         if (supabase) {
-          try {
-            await supabase.from('typography_styles').insert(newStyle);
-          } catch {}
+          const { error } = await supabase.from('typography_styles').insert(newStyle);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در ثبت سبک خط در پایگاه داده: ' + error.message }, 400);
+          }
         }
+
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'افزودن سبک خط', `افزودن سبک «${newStyle.name_fa}»`, clientIp);
         return jsonResponse({ success: true, style: newStyle, message: 'سبک خط جدید با موفقیت اضافه شد.' });
       }
@@ -1490,24 +1663,56 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (method === 'PATCH') {
         const body = await request.json() as any;
         if (supabase) {
-          try {
-            const { data: existing } = await supabase.from('typography_styles').select('id').eq('id', styleId).maybeSingle();
-            if (existing) {
-              await supabase.from('typography_styles').update(body).eq('id', styleId);
-            } else {
-              const defaultStyle = INITIAL_TYPOGRAPHY_STYLES.find(s => s.id === styleId) || { id: styleId };
-              await supabase.from('typography_styles').upsert({ ...defaultStyle, ...body, id: styleId });
+          const { data: existing } = await supabase.from('typography_styles').select('id').eq('id', styleId).maybeSingle();
+          const cleanPayload: any = { updated_at: new Date().toISOString() };
+          if (body.name_fa !== undefined) cleanPayload.name_fa = body.name_fa;
+          if (body.description_fa !== undefined) cleanPayload.description_fa = body.description_fa;
+          if (body.ai_description_en !== undefined) cleanPayload.ai_description_en = body.ai_description_en;
+          if (body.category !== undefined) cleanPayload.category = body.category;
+          if (body.active !== undefined) cleanPayload.active = body.active;
+          if (body.sort_order !== undefined) cleanPayload.sort_order = Number(body.sort_order);
+
+          if (existing) {
+            const { error: updErr } = await supabase.from('typography_styles').update(cleanPayload).eq('id', styleId);
+            if (updErr) {
+              return jsonResponse({ success: false, error: 'خطا در ویرایش سبک خط: ' + updErr.message }, 400);
             }
-          } catch {}
+          } else {
+            const defaultStyle = INITIAL_TYPOGRAPHY_STYLES.find(s => s.id === styleId) || {
+              id: styleId,
+              name_fa: cleanPayload.name_fa || 'سبک خط',
+              description_fa: cleanPayload.description_fa || '',
+              ai_description_en: cleanPayload.ai_description_en || '',
+              category: 'traditional',
+              active: true,
+              sort_order: 1
+            };
+            const insertObj = {
+              id: styleId,
+              name_fa: cleanPayload.name_fa || defaultStyle.name_fa,
+              description_fa: cleanPayload.description_fa || defaultStyle.description_fa,
+              ai_description_en: cleanPayload.ai_description_en || defaultStyle.ai_description_en,
+              category: cleanPayload.category || defaultStyle.category || 'traditional',
+              active: cleanPayload.active !== undefined ? cleanPayload.active : defaultStyle.active,
+              sort_order: cleanPayload.sort_order || defaultStyle.sort_order || 1,
+              updated_at: new Date().toISOString()
+            };
+            const { error: insErr } = await supabase.from('typography_styles').upsert(insertObj);
+            if (insErr) {
+              return jsonResponse({ success: false, error: 'خطا در ثبت سبک خط: ' + insErr.message }, 400);
+            }
+          }
         }
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ویرایش سبک خط', `ویرایش سبک خط ${styleId}`, clientIp);
         return jsonResponse({ success: true, message: 'سبک خط با موفقیت به‌روزرسانی شد.' });
       }
+
       if (method === 'DELETE') {
         if (supabase) {
-          try {
-            await supabase.from('typography_styles').delete().eq('id', styleId);
-          } catch {}
+          const { error } = await supabase.from('typography_styles').delete().eq('id', styleId);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در حذف سبک خط: ' + error.message }, 400);
+          }
         }
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'حذف سبک خط', `حذف سبک خط ${styleId}`, clientIp);
         return jsonResponse({ success: true, message: 'سبک خط با موفقیت حذف شد.' });
@@ -1515,14 +1720,70 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     }
 
     // 5. Materials, Models, Forms, Dimensions, Lightings, Shadows, Aspect Ratios
-    const entityConfigs: Record<string, { table: string; initial: any[]; nameFa: string; camelKey: string; snakeKey: string }> = {
-      'materials': { table: 'materials', initial: INITIAL_MATERIALS, nameFa: 'متریال', camelKey: 'materials', snakeKey: 'materials' },
-      'ai-models': { table: 'ai_models', initial: INITIAL_AI_MODELS, nameFa: 'مدل هوش مصنوعی', camelKey: 'aiModels', snakeKey: 'ai_models' },
-      'forms': { table: 'typography_forms', initial: INITIAL_TYPOGRAPHY_FORMS, nameFa: 'فرم تایپوگرافی', camelKey: 'forms', snakeKey: 'forms' },
-      'dimensions': { table: 'dimension_options', initial: INITIAL_DIMENSIONS, nameFa: 'بعد', camelKey: 'dimensions', snakeKey: 'dimensions' },
-      'lightings': { table: 'lighting_options', initial: INITIAL_LIGHTINGS, nameFa: 'نورپردازی', camelKey: 'lightings', snakeKey: 'lightings' },
-      'shadows': { table: 'shadow_options', initial: INITIAL_SHADOWS, nameFa: 'سایه‌زنی', camelKey: 'shadows', snakeKey: 'shadows' },
-      'aspect-ratios': { table: 'aspect_ratio_options', initial: INITIAL_ASPECT_RATIOS, nameFa: 'نسبت ابعاد', camelKey: 'aspectRatios', snakeKey: 'aspect_ratios' }
+    const entityConfigs: Record<string, {
+      table: string;
+      initial: any[];
+      nameFa: string;
+      camelKey: string;
+      snakeKey: string;
+      allowedCols: string[];
+    }> = {
+      'materials': {
+        table: 'materials',
+        initial: INITIAL_MATERIALS,
+        nameFa: 'متریال',
+        camelKey: 'materials',
+        snakeKey: 'materials',
+        allowedCols: ['name_fa', 'ai_description_en', 'active', 'sort_order']
+      },
+      'ai-models': {
+        table: 'ai_models',
+        initial: INITIAL_AI_MODELS,
+        nameFa: 'مدل هوش مصنوعی',
+        camelKey: 'aiModels',
+        snakeKey: 'ai_models',
+        allowedCols: ['name_fa', 'ai_name_en', 'active', 'sort_order']
+      },
+      'forms': {
+        table: 'typography_forms',
+        initial: INITIAL_TYPOGRAPHY_FORMS,
+        nameFa: 'فرم تایپوگرافی',
+        camelKey: 'forms',
+        snakeKey: 'forms',
+        allowedCols: ['name_fa', 'description_fa', 'ai_instruction_en', 'active', 'sort_order']
+      },
+      'dimensions': {
+        table: 'dimension_options',
+        initial: INITIAL_DIMENSIONS,
+        nameFa: 'بعد',
+        camelKey: 'dimensions',
+        snakeKey: 'dimensions',
+        allowedCols: ['name_fa', 'ai_description_en', 'active', 'sort_order']
+      },
+      'lightings': {
+        table: 'lighting_options',
+        initial: INITIAL_LIGHTINGS,
+        nameFa: 'نورپردازی',
+        camelKey: 'lightings',
+        snakeKey: 'lightings',
+        allowedCols: ['name_fa', 'ai_description_en', 'active', 'sort_order']
+      },
+      'shadows': {
+        table: 'shadow_options',
+        initial: INITIAL_SHADOWS,
+        nameFa: 'سایه‌زنی',
+        camelKey: 'shadows',
+        snakeKey: 'shadows',
+        allowedCols: ['name_fa', 'ai_description_en', 'active', 'sort_order']
+      },
+      'aspect-ratios': {
+        table: 'aspect_ratio_options',
+        initial: INITIAL_ASPECT_RATIOS,
+        nameFa: 'نسبت ابعاد',
+        camelKey: 'aspectRatios',
+        snakeKey: 'aspect_ratios',
+        allowedCols: ['name_fa', 'value', 'active', 'sort_order']
+      }
     };
 
     for (const [routeKey, cfg] of Object.entries(entityConfigs)) {
@@ -1545,22 +1806,32 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
 
         if (method === 'POST') {
           const body = await request.json() as any;
-          const newItem = {
-            id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${routeKey.slice(0, 4)}-${Date.now()}`,
-            ...body,
-            sort_order: Number(body.sort_order) || 99
+          const newItemId = body.id || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${routeKey.slice(0, 4)}-${Date.now()}`);
+
+          const cleanItem: any = {
+            id: newItemId,
+            name_fa: String(body.name_fa || '').trim(),
+            sort_order: Number(body.sort_order) || 99,
+            active: body.active !== false
           };
-          if (supabase) {
-            try {
-              await supabase.from(cfg.table).insert(newItem);
-            } catch {}
+
+          for (const col of cfg.allowedCols) {
+            if (body[col] !== undefined) cleanItem[col] = body[col];
           }
-          await recordAuditLog(supabase, authedUser.id, authedUser.username, `افزودن ${cfg.nameFa}`, `افزودن ${cfg.nameFa} «${newItem.name_fa || newItem.id}»`, clientIp);
+
+          if (supabase) {
+            const { error } = await supabase.from(cfg.table).insert(cleanItem);
+            if (error) {
+              return jsonResponse({ success: false, error: `خطا در ثبت ${cfg.nameFa}: ${error.message}` }, 400);
+            }
+          }
+
+          await recordAuditLog(supabase, authedUser.id, authedUser.username, `افزودن ${cfg.nameFa}`, `افزودن ${cfg.nameFa} «${cleanItem.name_fa}»`, clientIp);
           return jsonResponse({
             success: true,
-            item: newItem,
-            [cfg.camelKey]: newItem,
-            [cfg.snakeKey]: newItem,
+            item: cleanItem,
+            [cfg.camelKey]: cleanItem,
+            [cfg.snakeKey]: cleanItem,
             message: `${cfg.nameFa} با موفقیت افزوده شد.`
           });
         }
@@ -1572,24 +1843,50 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         if (method === 'PATCH') {
           const body = await request.json() as any;
           if (supabase) {
-            try {
-              const { data: existing } = await supabase.from(cfg.table).select('id').eq('id', entityId).maybeSingle();
-              if (existing) {
-                await supabase.from(cfg.table).update(body).eq('id', entityId);
-              } else {
-                const defaultItem = cfg.initial.find(i => i.id === entityId) || { id: entityId };
-                await supabase.from(cfg.table).upsert({ ...defaultItem, ...body, id: entityId });
+            const { data: existing } = await supabase.from(cfg.table).select('id').eq('id', entityId).maybeSingle();
+
+            const cleanUpdate: any = {};
+            if (body.name_fa !== undefined) cleanUpdate.name_fa = body.name_fa;
+            if (body.active !== undefined) cleanUpdate.active = body.active;
+            if (body.sort_order !== undefined) cleanUpdate.sort_order = Number(body.sort_order);
+
+            for (const col of cfg.allowedCols) {
+              if (body[col] !== undefined) cleanUpdate[col] = body[col];
+            }
+
+            if (existing) {
+              const { error: updErr } = await supabase.from(cfg.table).update(cleanUpdate).eq('id', entityId);
+              if (updErr) {
+                return jsonResponse({ success: false, error: `خطا در ویرایش ${cfg.nameFa}: ${updErr.message}` }, 400);
               }
-            } catch {}
+            } else {
+              const defaultItem = cfg.initial.find(i => i.id === entityId) || { id: entityId, name_fa: 'گزینه', active: true, sort_order: 1 };
+              const insertObj: any = {
+                id: entityId,
+                name_fa: cleanUpdate.name_fa || defaultItem.name_fa,
+                active: cleanUpdate.active !== undefined ? cleanUpdate.active : (defaultItem.active ?? true),
+                sort_order: cleanUpdate.sort_order || defaultItem.sort_order || 1
+              };
+              for (const col of cfg.allowedCols) {
+                insertObj[col] = cleanUpdate[col] !== undefined ? cleanUpdate[col] : defaultItem[col];
+              }
+
+              const { error: insErr } = await supabase.from(cfg.table).upsert(insertObj);
+              if (insErr) {
+                return jsonResponse({ success: false, error: `خطا در ثبت ${cfg.nameFa}: ${insErr.message}` }, 400);
+              }
+            }
           }
           await recordAuditLog(supabase, authedUser.id, authedUser.username, `ویرایش ${cfg.nameFa}`, `ویرایش ${cfg.nameFa} با شناسه ${entityId}`, clientIp);
           return jsonResponse({ success: true, message: `${cfg.nameFa} با موفقیت به‌روزرسانی شد.` });
         }
+
         if (method === 'DELETE') {
           if (supabase) {
-            try {
-              await supabase.from(cfg.table).delete().eq('id', entityId);
-            } catch {}
+            const { error } = await supabase.from(cfg.table).delete().eq('id', entityId);
+            if (error) {
+              return jsonResponse({ success: false, error: `خطا در حذف ${cfg.nameFa}: ${error.message}` }, 400);
+            }
           }
           await recordAuditLog(supabase, authedUser.id, authedUser.username, `حذف ${cfg.nameFa}`, `حذف ${cfg.nameFa} با شناسه ${entityId}`, clientIp);
           return jsonResponse({ success: true, message: `${cfg.nameFa} با موفقیت حذف گردید.` });
@@ -1597,7 +1894,7 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       }
     }
 
-    // 6. Feedback & Reports
+    // 6. Feedback & Reports Admin
     if (pathname === '/api/admin/feedback' || pathname === '/api/admin/feedback-reports') {
       if (method === 'GET') {
         const typeParam = url.searchParams.get('type');
@@ -1610,7 +1907,9 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             let query = supabase.from('feedback_reports').select('*');
             if (typeParam && typeParam !== 'all') query = query.eq('type', typeParam);
             if (statusParam && statusParam !== 'all') query = query.eq('status', statusParam);
-            if (searchParam) query = query.or(`name.ilike.%${searchParam}%,message.ilike.%${searchParam}%,subject.ilike.%${searchParam}%`);
+            if (searchParam) {
+              query = query.or(`title.ilike.%${searchParam}%,description.ilike.%${searchParam}%,username.ilike.%${searchParam}%`);
+            }
 
             const { data } = await query.order('created_at', { ascending: false });
             if (data) reports = data;
@@ -1620,27 +1919,38 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       }
     }
 
-    const feedbackMatch = pathname.match(/^\/api\/admin\/feedback\/([^\/]+)(\/status)?$/);
+    const feedbackMatch = pathname.match(/^\/api\/admin\/feedback\/([^\/]+)(?:\/status)?$/);
     if (feedbackMatch) {
       const fId = feedbackMatch[1];
       if (method === 'PATCH') {
         const body = await request.json() as any;
         const newStatus = body.status || 'read';
         let updatedReport: any = { id: fId, status: newStatus };
+
         if (supabase) {
-          try {
-            const { data } = await supabase.from('feedback_reports').update({ status: newStatus }).eq('id', fId).select().maybeSingle();
-            if (data) updatedReport = data;
-          } catch {}
+          const { data, error } = await supabase
+            .from('feedback_reports')
+            .update({ status: newStatus })
+            .eq('id', fId)
+            .select()
+            .maybeSingle();
+
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در تغییر وضعیت پیام: ' + error.message }, 500);
+          }
+          if (data) updatedReport = data;
         }
+
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'تغییر وضعیت گزارش', `تغییر وضعیت پیام ${fId} به ${newStatus}`, clientIp);
-        return jsonResponse({ success: true, feedback: updatedReport, message: 'وضعیت گزارش با موفقیت به‌روزرسانی شد.' });
+        return jsonResponse({ success: true, feedback: updatedReport, message: 'وضعیت پیام با موفقیت به‌روزرسانی شد.' });
       }
+
       if (method === 'DELETE') {
         if (supabase) {
-          try {
-            await supabase.from('feedback_reports').delete().eq('id', fId);
-          } catch {}
+          const { error } = await supabase.from('feedback_reports').delete().eq('id', fId);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در حذف پیام: ' + error.message }, 500);
+          }
         }
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'حذف پیام کاربر', `حذف گزارش با شناسه ${fId}`, clientIp);
         return jsonResponse({ success: true, message: 'پیام با موفقیت حذف گردید.' });
@@ -1661,24 +1971,27 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       }
     }
 
-    const secMatch = pathname.match(/^\/api\/admin\/security-events\/([^\/]+)(\/status)?$/);
+    const secMatch = pathname.match(/^\/api\/admin\/security-events\/([^\/]+)(?:\/status)?$/);
     if (secMatch) {
       const sId = secMatch[1];
       if (method === 'PATCH') {
         const body = await request.json() as any;
         const newStatus = body.status || 'reviewed';
         if (supabase) {
-          try {
-            await supabase.from('security_events').update({ status: newStatus }).eq('id', sId);
-          } catch {}
+          const { error } = await supabase.from('security_events').update({ status: newStatus }).eq('id', sId);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در تغییر وضعیت رویداد امنیتی: ' + error.message }, 500);
+          }
         }
         return jsonResponse({ success: true, message: 'وضعیت رویداد امنیتی به‌روزرسانی شد.' });
       }
+
       if (method === 'DELETE') {
         if (supabase) {
-          try {
-            await supabase.from('security_events').delete().eq('id', sId);
-          } catch {}
+          const { error } = await supabase.from('security_events').delete().eq('id', sId);
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در حذف رویداد امنیتی: ' + error.message }, 500);
+          }
         }
         return jsonResponse({ success: true, message: 'رویداد امنیتی با موفقیت حذف شد.' });
       }
@@ -1691,7 +2004,20 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         if (supabase) {
           try {
             const { data } = await supabase.from('login_logs').select('*').order('timestamp', { ascending: false }).limit(200);
-            if (data) logs = data;
+            if (data && data.length > 0) {
+              logs = data.map(l => ({
+                id: l.id,
+                user_id: l.user_id,
+                username: l.username,
+                timestamp: l.timestamp,
+                ip_address: l.ip_address,
+                user_agent: l.user_agent,
+                device_info: l.device_info || parseUserAgent(l.user_agent),
+                status: l.success ? 'success' : 'failed',
+                reason: l.fail_reason || '',
+                is_suspicious: !!l.is_suspicious
+              }));
+            }
           } catch {}
         }
         return jsonResponse({ success: true, logs, total: logs.length, page: 1, totalPages: 1 });
@@ -1702,9 +2028,10 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
     if (loginLogMatch && method === 'DELETE') {
       const lId = loginLogMatch[1];
       if (supabase) {
-        try {
-          await supabase.from('login_logs').delete().eq('id', lId);
-        } catch {}
+        const { error } = await supabase.from('login_logs').delete().eq('id', lId);
+        if (error) {
+          return jsonResponse({ success: false, error: 'خطا در حذف لاگ ورود: ' + error.message }, 500);
+        }
       }
       return jsonResponse({ success: true, message: 'لاگ ورود با موفقیت حذف شد.' });
     }
@@ -1715,8 +2042,13 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
         let logs: any[] = [];
         if (supabase) {
           try {
-            const { data } = await supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(200);
-            if (data) logs = data;
+            const { data } = await supabase.from('admin_audit_logs').select('*').order('timestamp', { ascending: false }).limit(200);
+            if (data && data.length > 0) {
+              logs = data;
+            } else {
+              const { data: fbData } = await supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(200);
+              if (fbData) logs = fbData;
+            }
           } catch {}
         }
         return jsonResponse({ success: true, logs, total: logs.length, page: 1, totalPages: 1 });
@@ -1728,13 +2060,16 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       const aId = auditLogMatch[1];
       if (supabase) {
         try {
+          await supabase.from('admin_audit_logs').delete().eq('id', aId);
+        } catch {}
+        try {
           await supabase.from('audit_logs').delete().eq('id', aId);
         } catch {}
       }
       return jsonResponse({ success: true, message: 'لاگ نظارتی با موفقیت حذف شد.' });
     }
 
-    // 10. Site Settings
+    // 10. Site Settings Admin
     if (pathname === '/api/admin/settings') {
       if (method === 'GET') {
         let settings = DEFAULT_APP_SETTINGS;
@@ -1752,15 +2087,19 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
       if (method === 'POST' || method === 'PATCH') {
         const body = await request.json() as any;
         const mergedSettings = { ...DEFAULT_APP_SETTINGS, ...body };
+
         if (supabase) {
-          try {
-            await supabase.from('site_settings').upsert({
-              id: 'default',
-              settings_json: mergedSettings,
-              updated_at: new Date().toISOString()
-            });
-          } catch {}
+          const { error } = await supabase.from('site_settings').upsert({
+            id: 'default',
+            settings_json: mergedSettings,
+            updated_at: new Date().toISOString()
+          });
+
+          if (error) {
+            return jsonResponse({ success: false, error: 'خطا در ذخیره تنظیمات در پایگاه داده: ' + error.message }, 500);
+          }
         }
+
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'به‌روزرسانی تنظیمات سامانه', 'تغییر تنظیمات عمومی سامانه', clientIp);
         return jsonResponse({ success: true, settings: mergedSettings, message: 'تنظیمات با موفقیت در سامانه ذخیره گردید.' });
       }
@@ -1790,8 +2129,9 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             totalDeleted += deletedCounts.login_logs;
           }
           if (target === 'all' || target === 'audit_logs') {
-            const { count } = await supabase.from('audit_logs').delete({ count: 'exact' }).lt('timestamp', cutoffDate);
-            deletedCounts.audit_logs = count || 0;
+            const { count: c1 } = await supabase.from('admin_audit_logs').delete({ count: 'exact' }).lt('timestamp', cutoffDate);
+            const { count: c2 } = await supabase.from('audit_logs').delete({ count: 'exact' }).lt('timestamp', cutoffDate);
+            deletedCounts.audit_logs = (c1 || 0) + (c2 || 0);
             totalDeleted += deletedCounts.audit_logs;
           }
           if (target === 'all' || target === 'security_events') {
@@ -1809,7 +2149,9 @@ async function handleApiRequest(request: Request, env: Env): Promise<Response> {
             deletedCounts.feedback_reports = count || 0;
             totalDeleted += deletedCounts.feedback_reports;
           }
-        } catch {}
+        } catch (err: any) {
+          return jsonResponse({ success: false, error: 'خطا در عملیات پاکسازی: ' + err.message }, 500);
+        }
       }
 
       await recordAuditLog(

@@ -31,10 +31,12 @@ import type {
   AppSettings,
   AdminAuditLog,
   GenerationLog,
-  FeedbackReport
+  FeedbackReport,
+  UserSubscription,
+  SubscriptionStatus
 } from '../src/types.js';
 
-interface StoredUser extends Omit<User, 'ip_count' | 'active_sessions_count'> {
+interface StoredUser extends Omit<User, 'ip_count' | 'active_sessions_count' | 'daily_primary_used' | 'daily_primary_limit' | 'daily_primary_remaining' | 'can_generate_primary'> {
   password_hash: string;
 }
 
@@ -67,6 +69,7 @@ interface DatabaseSchema {
   admin_audit_logs: AdminAuditLog[];
   generation_logs: GenerationLog[];
   feedback_reports: FeedbackReport[];
+  user_subscriptions?: UserSubscription[];
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -151,6 +154,9 @@ class DatabaseEngine {
 
     if (!dbData.feedback_reports) {
       dbData.feedback_reports = [];
+    }
+    if (!dbData.user_subscriptions) {
+      dbData.user_subscriptions = [];
     }
 
     return dbData;
@@ -249,16 +255,95 @@ class DatabaseEngine {
   }
 
   // --- Users ---
-  getUserById(id: string): User | null {
+  getUserById(id: string, deviceFingerprint?: string): User | null {
     const user = this.data.users.find(u => u.id === id);
     if (!user) return null;
-    return this.enrichUser(user);
+    return this.enrichUser(user, deviceFingerprint);
   }
 
   getUserByUsername(username: string): StoredUser | null {
     const cleanUsername = username.trim().toLowerCase();
     const user = this.data.users.find(u => u.username.toLowerCase() === cleanUsername);
     return user || null;
+  }
+
+  getUserByEitaaId(eitaaId: string): StoredUser | null {
+    if (!eitaaId) return null;
+    const cleanId = String(eitaaId).trim();
+    return this.data.users.find(u => u.eitaa_id === cleanId) || null;
+  }
+
+  createOrUpdateEitaaUser(eitaaUser: {
+    id: string | number;
+    first_name?: string;
+    last_name?: string;
+    username?: string;
+    photo_url?: string;
+  }, deviceFingerprint?: string): User {
+    const eitaaId = String(eitaaUser.id).trim();
+    if (!eitaaId) {
+      throw new Error('شناسه کاربر ایتا نامعتبر است.');
+    }
+
+    const now = new Date().toISOString();
+    let existingUser = this.getUserByEitaaId(eitaaId);
+
+    if (!existingUser && eitaaUser.username) {
+      const cleanUsername = eitaaUser.username.trim().toLowerCase();
+      const userByUname = this.getUserByUsername(cleanUsername);
+      if (userByUname) {
+        existingUser = userByUname;
+      }
+    }
+
+    if (existingUser) {
+      existingUser.eitaa_id = eitaaId;
+      existingUser.auth_provider = 'eitaa';
+      if (eitaaUser.first_name) existingUser.first_name = eitaaUser.first_name;
+      if (eitaaUser.last_name) existingUser.last_name = eitaaUser.last_name;
+      if (deviceFingerprint && !existingUser.created_device_fingerprint) {
+        existingUser.created_device_fingerprint = deviceFingerprint;
+      }
+      existingUser.updated_at = now;
+      existingUser.last_login_at = now;
+      this.saveDatabase();
+      return this.enrichUser(existingUser, deviceFingerprint);
+    }
+
+    const baseName = eitaaUser.username
+      ? eitaaUser.username.trim()
+      : `eitaa_${eitaaId.slice(0, 10)}`;
+    let finalUsername = baseName;
+    let counter = 1;
+    while (this.getUserByUsername(finalUsername)) {
+      finalUsername = `${baseName}_${counter++}`;
+    }
+
+    const newUser: StoredUser = {
+      id: `usr-eitaa-${eitaaId.slice(0, 8)}-${crypto.randomUUID().slice(0, 4)}`,
+      username: finalUsername,
+      role: 'user',
+      password_hash: bcrypt.hashSync(`eitaa_sso_${crypto.randomUUID()}`, 10),
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+      last_login_at: now,
+      is_suspicious: false,
+      auth_provider: 'eitaa',
+      eitaa_id: eitaaId,
+      first_name: eitaaUser.first_name || '',
+      last_name: eitaaUser.last_name || '',
+      created_device_fingerprint: deviceFingerprint || undefined,
+      subscription_status: 'free',
+      is_unlimited: false,
+      subscription_activated_at: null,
+      subscription_expires_at: null,
+      subscription_activated_by: null
+    };
+
+    this.data.users.push(newUser);
+    this.saveDatabase();
+    return this.enrichUser(newUser, deviceFingerprint);
   }
 
   listUsers(search?: string): User[] {
@@ -369,12 +454,233 @@ class DatabaseEngine {
     this.saveDatabase();
   }
 
-  private enrichUser(storedUser: StoredUser): User {
-    const userLogs = this.data.login_logs.filter(l => l.user_id === storedUser.id && l.status === 'success');
+  // --- Self-Service Registration ---
+  registerUser(username: string, rawPassword: string, deviceFingerprint?: string): User {
+    const cleanUsername = username.trim();
+    if (!cleanUsername) {
+      throw new Error('نام کاربری نمی‌تواند خالی باشد.');
+    }
+    if (cleanUsername.length < 3 || cleanUsername.length > 40) {
+      throw new Error('نام کاربری باید بین ۳ تا ۴۰ کاراکتر باشد.');
+    }
+    if (/[<>{}[\]\\/]/.test(cleanUsername)) {
+      throw new Error('نام کاربری حاوی کاراکترهای غیرمجاز است.');
+    }
+    if (this.getUserByUsername(cleanUsername)) {
+      throw new Error('این نام کاربری از قبل در سامانه ثبت شده است. لطفاً وارد شوید یا نام کاربری دیگری انتخاب کنید.');
+    }
+    if (!rawPassword || rawPassword.length < 6) {
+      throw new Error('رمز عبور باید حداقل ۶ کاراکتر باشد.');
+    }
+
+    const now = new Date().toISOString();
+    const newUser: StoredUser = {
+      id: `usr-${crypto.randomUUID().slice(0, 8)}`,
+      username: cleanUsername,
+      role: 'user',
+      password_hash: bcrypt.hashSync(rawPassword, 10),
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+      is_suspicious: false,
+      auth_provider: 'local',
+      created_device_fingerprint: deviceFingerprint || undefined,
+      subscription_status: 'free',
+      is_unlimited: false,
+      subscription_activated_at: null,
+      subscription_expires_at: null,
+      subscription_activated_by: null
+    };
+
+    this.data.users.push(newUser);
+    this.saveDatabase();
+    return this.enrichUser(newUser, deviceFingerprint);
+  }
+
+  // --- Subscription Management (Admin) ---
+  setUserSubscription(
+    userId: string,
+    options: {
+      plan_name?: string;
+      is_unlimited?: boolean;
+      status?: 'active' | 'free' | 'expired';
+      duration_days?: number | null;
+      activated_by: string;
+      notes?: string;
+    }
+  ): User {
+    const user = this.data.users.find(u => u.id === userId);
+    if (!user) throw new Error('کاربر یافت نشد.');
+
+    const now = new Date();
+    const nowISO = now.toISOString();
+    const planName = options.plan_name || 'اشتراک نامحدود اختصاصی خط‌نگار';
+    const isActivating = options.status !== 'free' && (options.is_unlimited ?? true);
+
+    if (isActivating) {
+      user.subscription_status = 'active';
+      user.is_unlimited = true;
+      user.subscription_activated_at = nowISO;
+      user.subscription_activated_by = options.activated_by;
+
+      if (options.duration_days && options.duration_days > 0) {
+        user.subscription_expires_at = new Date(now.getTime() + options.duration_days * 24 * 60 * 60 * 1000).toISOString();
+      } else {
+        user.subscription_expires_at = null; // Lifetime unlimited
+      }
+    } else {
+      user.subscription_status = 'free';
+      user.is_unlimited = false;
+      user.subscription_expires_at = nowISO;
+      user.subscription_activated_by = options.activated_by;
+    }
+
+    user.updated_at = nowISO;
+
+    if (!this.data.user_subscriptions) {
+      this.data.user_subscriptions = [];
+    }
+
+    const subRecord: UserSubscription = {
+      id: `sub-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`,
+      user_id: user.id,
+      plan_name: planName,
+      status: isActivating ? 'active' : 'cancelled',
+      activated_at: nowISO,
+      expires_at: user.subscription_expires_at,
+      activated_by: options.activated_by,
+      notes: options.notes || (isActivating ? 'فعال‌سازی دستی اشتراک توسط مدیریت' : 'لغو اشتراک توسط مدیریت'),
+      created_at: nowISO
+    };
+
+    this.data.user_subscriptions.unshift(subRecord);
+    this.saveDatabase();
+    return this.enrichUser(user);
+  }
+
+  getUserSubscriptions(userId: string): UserSubscription[] {
+    return (this.data.user_subscriptions || []).filter(s => s.user_id === userId);
+  }
+
+  private getTehranStartOfDay(): number {
+    try {
+      const tehranDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date());
+      return new Date(`${tehranDateStr}T00:00:00+03:30`).getTime();
+    } catch {
+      const d = new Date();
+      d.setUTCHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+  }
+
+  getUserDailyUsage(userId?: string, options?: { deviceFingerprint?: string; eitaaId?: string }): {
+    dailyPrimaryUsed: number;
+    dailyGenerateAgainUsed: number;
+    dailyLimit: number;
+    remaining: number;
+    canGeneratePrimary: boolean;
+    isUnlimited: boolean;
+  } {
+    const user = userId ? this.data.users.find(u => u.id === userId) : undefined;
+    const startOfDay = this.getTehranStartOfDay();
+
+    // 1. If user is an active unlimited subscriber or admin, grant unlimited quota immediately
+    const isUnlimited = !!user && (
+      user.role === 'admin' ||
+      !!user.is_unlimited ||
+      (user.subscription_status === 'active' &&
+        (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()))
+    );
+
+    const freeLimit = Number(this.data.app_settings?.daily_free_limit) > 0
+      ? Number(this.data.app_settings.daily_free_limit)
+      : 1;
+
+    if (isUnlimited) {
+      const dailyPrimaryUsed = (this.data.generation_logs || []).filter(
+        l => l.user_id === user!.id && !l.is_generate_again && new Date(l.timestamp).getTime() >= startOfDay
+      ).length;
+      const dailyGenerateAgainUsed = (this.data.generation_logs || []).filter(
+        l => l.user_id === user!.id && !!l.is_generate_again && new Date(l.timestamp).getTime() >= startOfDay
+      ).length;
+
+      return {
+        dailyPrimaryUsed,
+        dailyGenerateAgainUsed,
+        dailyLimit: 999999,
+        remaining: 999999,
+        canGeneratePrimary: true,
+        isUnlimited: true
+      };
+    }
+
+    // 2. Multi-factor free quota checking:
+    // We check usage against user_id, eitaa_id, AND device_fingerprint.
+    // This strictly prevents a user from creating multiple accounts to get more than 1 free generation per day.
+    const effectiveFp = options?.deviceFingerprint || user?.created_device_fingerprint;
+    const effectiveEitaaId = options?.eitaaId || user?.eitaa_id;
+
+    const matchingPrimaryLogs = (this.data.generation_logs || []).filter(l => {
+      if (new Date(l.timestamp).getTime() < startOfDay) return false;
+      if (l.is_generate_again) return false;
+
+      // 1. Match account ID
+      if (user && l.user_id === user.id) return true;
+
+      // 2. Match Eitaa identity
+      if (effectiveEitaaId && l.eitaa_id && l.eitaa_id === effectiveEitaaId) return true;
+
+      // 3. Match device fingerprint
+      if (effectiveFp && l.device_fingerprint && l.device_fingerprint === effectiveFp) return true;
+
+      return false;
+    });
+
+    const matchingAgainLogs = (this.data.generation_logs || []).filter(l => {
+      if (new Date(l.timestamp).getTime() < startOfDay) return false;
+      if (!l.is_generate_again) return false;
+
+      if (user && l.user_id === user.id) return true;
+      if (effectiveEitaaId && l.eitaa_id && l.eitaa_id === effectiveEitaaId) return true;
+      if (effectiveFp && l.device_fingerprint && l.device_fingerprint === effectiveFp) return true;
+
+      return false;
+    });
+
+    const dailyPrimaryUsed = matchingPrimaryLogs.length;
+    const dailyGenerateAgainUsed = matchingAgainLogs.length;
+    const remaining = Math.max(0, freeLimit - dailyPrimaryUsed);
+    const canGeneratePrimary = dailyPrimaryUsed < freeLimit;
+
+    return {
+      dailyPrimaryUsed,
+      dailyGenerateAgainUsed,
+      dailyLimit: freeLimit,
+      remaining,
+      canGeneratePrimary,
+      isUnlimited: false
+    };
+  }
+
+  private enrichUser(storedUser: StoredUser, deviceFingerprint?: string): User {
+    const userLogs = (this.data.login_logs || []).filter(l => l.user_id === storedUser.id && l.status === 'success');
     const uniqueIps = new Set(userLogs.map(l => l.ip_address));
-    const activeSessions = this.data.sessions.filter(
+    const activeSessions = (this.data.sessions || []).filter(
       s => s.user_id === storedUser.id && new Date(s.expires_at) > new Date()
     );
+
+    const usage = this.getUserDailyUsage(storedUser.id, {
+      deviceFingerprint: deviceFingerprint || storedUser.created_device_fingerprint,
+      eitaaId: storedUser.eitaa_id
+    });
+    const isUnlimited = usage.isUnlimited;
+    const subscriptionStatus: SubscriptionStatus = isUnlimited
+      ? 'active'
+      : (storedUser.subscription_status || 'free');
+
+    const lastSubscription = (this.data.user_subscriptions || [])
+      .filter(s => s.user_id === storedUser.id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 
     return {
       id: storedUser.id,
@@ -386,7 +692,27 @@ class DatabaseEngine {
       last_login_at: storedUser.last_login_at,
       ip_count: uniqueIps.size,
       active_sessions_count: activeSessions.length,
-      is_suspicious: storedUser.is_suspicious || false
+      is_suspicious: storedUser.is_suspicious || false,
+      // Eitaa Mini App (Barnamak) SSO integration
+      auth_provider: storedUser.auth_provider || 'local',
+      eitaa_id: storedUser.eitaa_id,
+      first_name: storedUser.first_name,
+      last_name: storedUser.last_name,
+      created_device_fingerprint: storedUser.created_device_fingerprint,
+      // Subscription & limits
+      subscription_status: subscriptionStatus,
+      subscription_activated_at: storedUser.subscription_activated_at || (isUnlimited ? storedUser.created_at : null),
+      subscription_expires_at: storedUser.subscription_expires_at || null,
+      subscription_activated_by: storedUser.subscription_activated_by || null,
+      subscription_notes: storedUser.subscription_notes || lastSubscription?.notes || '',
+      is_unlimited: isUnlimited,
+      daily_primary_used: usage.dailyPrimaryUsed,
+      daily_primary_limit: usage.dailyLimit,
+      daily_primary_remaining: usage.remaining,
+      can_generate_primary: usage.canGeneratePrimary,
+      today_primary_count: usage.dailyPrimaryUsed,
+      today_generate_again_count: usage.dailyGenerateAgainUsed,
+      subscription: lastSubscription
     };
   }
 
@@ -1095,6 +1421,9 @@ class DatabaseEngine {
     styleId: string;
     formId: string;
     isGenerateAgain: boolean;
+    deviceFingerprint?: string;
+    eitaaId?: string;
+    ipAddress?: string;
   }): void {
     const log: GenerationLog = {
       id: `gen-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`,
@@ -1106,7 +1435,10 @@ class DatabaseEngine {
       style_id: params.styleId,
       form_id: params.formId,
       is_generate_again: params.isGenerateAgain,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      device_fingerprint: params.deviceFingerprint,
+      eitaa_id: params.eitaaId,
+      ip_address: params.ipAddress
     };
     this.data.generation_logs.unshift(log);
     if (this.data.generation_logs.length > 10000) {
@@ -1377,6 +1709,11 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
     is_suspicious BOOLEAN NOT NULL DEFAULT false,
+    auth_provider VARCHAR(30) NOT NULL DEFAULT 'local' CHECK (auth_provider IN ('local', 'eitaa')),
+    eitaa_id VARCHAR(100),
+    first_name VARCHAR(150),
+    last_name VARCHAR(150),
+    created_device_fingerprint VARCHAR(128),
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1541,11 +1878,34 @@ CREATE TABLE IF NOT EXISTS generation_logs (
     style_id VARCHAR(50),
     form_id VARCHAR(50),
     is_generate_again BOOLEAN NOT NULL DEFAULT false,
+    device_fingerprint VARCHAR(128),
+    eitaa_id VARCHAR(100),
+    ip_address VARCHAR(64),
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plan_type VARCHAR(50) NOT NULL DEFAULT 'unlimited',
+    status VARCHAR(30) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled', 'free')),
+    activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    activated_by VARCHAR(100) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 3. INDEXES
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_eitaa_id ON users(eitaa_id);
 CREATE INDEX IF NOT EXISTS idx_login_logs_user ON login_logs(user_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_login_logs_ip ON login_logs(ip_address);
 CREATE INDEX IF NOT EXISTS idx_security_events_status ON security_events(status);
@@ -1553,13 +1913,77 @@ CREATE INDEX IF NOT EXISTS idx_feedback_reports_status ON feedback_reports(statu
 CREATE INDEX IF NOT EXISTS idx_master_prompts_active ON master_prompts(active, sort_order);
 CREATE INDEX IF NOT EXISTS idx_typography_styles_active ON typography_styles(active, sort_order);
 CREATE INDEX IF NOT EXISTS idx_generation_logs_user ON generation_logs(user_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_gen_logs_device_time ON generation_logs(device_fingerprint, timestamp);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_subscriptions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_expires ON user_subscriptions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key);
 
--- 4. ROW LEVEL SECURITY POLICIES (Supabase)
+-- 4. ROW LEVEL SECURITY POLICIES & DATABASE RULES (Supabase / PostgreSQL)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE master_prompts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typography_styles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE generation_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feedback_reports ENABLE ROW LEVEL SECURITY;
 
--- Note: All privileged operations route via server-side service role.
+-- Database Rules / Security Policies:
+-- 1. App settings rules:
+-- Public and authenticated users can read configuration (banners, eitaa link, labels)
+DROP POLICY IF EXISTS "Public read app settings" ON app_settings;
+CREATE POLICY "Public read app settings" ON app_settings
+    FOR SELECT USING (true);
+
+-- Only verified administrators can insert or update system settings
+DROP POLICY IF EXISTS "Admin modify app settings" ON app_settings;
+CREATE POLICY "Admin modify app settings" ON app_settings
+    FOR ALL
+    USING (EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'))
+    WITH CHECK (EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'));
+
+-- 2. User subscriptions rules:
+-- Regular users can view only their own subscription state and remaining limits
+DROP POLICY IF EXISTS "Users read their own subscriptions" ON user_subscriptions;
+CREATE POLICY "Users read their own subscriptions" ON user_subscriptions
+    FOR SELECT USING (auth.uid() = user_id);
+
+-- Only administrators can grant, extend, or revoke unlimited subscriptions
+DROP POLICY IF EXISTS "Admin manage subscriptions" ON user_subscriptions;
+CREATE POLICY "Admin manage subscriptions" ON user_subscriptions
+    FOR ALL
+    USING (EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'))
+    WITH CHECK (EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'));
+
+-- 3. Generation logs rules:
+-- Regular users can view their own generation history
+DROP POLICY IF EXISTS "Users read own generation logs" ON generation_logs;
+CREATE POLICY "Users read own generation logs" ON generation_logs
+    FOR SELECT USING (auth.uid() = user_id);
+
+-- Authenticated users can insert their own generation events
+DROP POLICY IF EXISTS "Users insert own generation logs" ON generation_logs;
+CREATE POLICY "Users insert own generation logs" ON generation_logs
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Admins can view and monitor all user generation logs and metrics
+DROP POLICY IF EXISTS "Admin manage generation logs" ON generation_logs;
+CREATE POLICY "Admin manage generation logs" ON generation_logs
+    FOR ALL
+    USING (EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'));
+
+-- 4. Feedback & reports rules:
+-- Users can insert feedback and read their own reports
+DROP POLICY IF EXISTS "Users insert feedback" ON feedback_reports;
+CREATE POLICY "Users insert feedback" ON feedback_reports
+    FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+
+DROP POLICY IF EXISTS "Admin manage feedback" ON feedback_reports;
+CREATE POLICY "Admin manage feedback" ON feedback_reports
+    FOR ALL
+    USING (EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'));
+
+-- Note: In production Node.js execution, all sensitive administrative operations and daily quota validations
+-- are securely governed server-side via the DatabaseEngine abstraction and atomic storage.
 `;
   }
 }

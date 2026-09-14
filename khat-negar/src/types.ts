@@ -4,6 +4,8 @@
 
 export type UserRole = 'admin' | 'user';
 
+export type SubscriptionStatus = 'free' | 'active' | 'expired';
+
 export interface User {
   id: string;
   username: string;
@@ -15,6 +17,38 @@ export interface User {
   ip_count: number;
   active_sessions_count: number;
   is_suspicious?: boolean;
+  // Eitaa Mini App (Barnamak) SSO integration
+  auth_provider?: 'local' | 'eitaa';
+  eitaa_id?: string;
+  first_name?: string;
+  last_name?: string;
+  created_device_fingerprint?: string;
+  // Subscription and Daily Usage State
+  subscription_status?: SubscriptionStatus;
+  subscription_activated_at?: string | null;
+  subscription_expires_at?: string | null;
+  subscription_activated_by?: string | null;
+  subscription_notes?: string;
+  is_unlimited?: boolean;
+  daily_primary_used?: number;
+  daily_primary_limit?: number;
+  daily_primary_remaining?: number;
+  can_generate_primary?: boolean;
+  today_primary_count?: number;
+  today_generate_again_count?: number;
+  subscription?: UserSubscription;
+}
+
+export interface UserSubscription {
+  id: string;
+  user_id: string;
+  plan_name: string;
+  status: 'active' | 'expired' | 'cancelled';
+  activated_at: string;
+  expires_at?: string | null;
+  activated_by: string;
+  notes?: string;
+  created_at: string;
 }
 
 export interface LoginLog {
@@ -205,6 +239,20 @@ export interface AppSettings {
   footer_title_fa?: string;
   footer_subtitle_fa?: string;
 
+  // Subscription, Daily Limit & Eitaa Integration
+  eitaa_channel_url?: string;
+  eitaa_channel_name_fa?: string;
+  subscription_plans_title_fa?: string;
+  daily_limit_message_fa?: string;
+  daily_limit_badge_unlimited_fa?: string;
+  daily_limit_badge_free_fa?: string;
+  daily_limit_free_subtext_fa?: string;
+  daily_limit_exceeded_title_fa?: string;
+  daily_limit_exceeded_desc_fa?: string;
+  daily_limit_upgrade_prompt_fa?: string;
+  daily_limit_eitaa_btn_text_fa?: string;
+  daily_free_limit?: number;
+
   // Defaults
   default_style_id: string;
   default_form_id: string;
@@ -246,6 +294,9 @@ export interface GenerationLog {
   form_id: string;
   is_generate_again: boolean;
   timestamp: string;
+  device_fingerprint?: string;
+  eitaa_id?: string;
+  ip_address?: string;
 }
 
 export interface TypographyUserConfig {
@@ -273,3 +324,125 @@ export interface GeneratePromptResponse {
   cycleCompleted?: boolean;
   message?: string;
 }
+
+// ==========================================
+// EITAA MINI APP (BARNAMAK) TYPES & SDK DECLARATIONS
+// ==========================================
+
+export interface EitaaUser {
+  id?: number | string;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  language_code?: string;
+  photo_url?: string;
+}
+
+export interface EitaaInitDataUnsafe {
+  query_id?: string;
+  user?: EitaaUser;
+  auth_date?: number | string;
+  hash?: string;
+  start_param?: string;
+}
+
+export interface EitaaThemeParams {
+  bg_color?: string;
+  text_color?: string;
+  hint_color?: string;
+  link_color?: string;
+  button_color?: string;
+  button_text_color?: string;
+  secondary_bg_color?: string;
+  header_bg_color?: string;
+  accent_text_color?: string;
+  section_bg_color?: string;
+  section_header_text_color?: string;
+  section_separator_color?: string;
+  subtitle_text_color?: string;
+  destructive_text_color?: string;
+  bottom_bar_bg_color?: string;
+  [key: string]: string | undefined;
+}
+
+export interface EitaaBackButton {
+  isVisible?: boolean;
+  show?: () => void;
+  hide?: () => void;
+  onClick?: (callback: () => void) => void;
+  offClick?: (callback: () => void) => void;
+}
+
+export interface EitaaBottomButton {
+  text?: string;
+  color?: string;
+  textColor?: string;
+  isVisible?: boolean;
+  isActive?: boolean;
+  isProgressVisible?: boolean;
+  setText?: (text: string) => void;
+  show?: () => void;
+  hide?: () => void;
+  enable?: () => void;
+  disable?: () => void;
+  showProgress?: (leaveActive?: boolean) => void;
+  hideProgress?: () => void;
+  onClick?: (callback: () => void) => void;
+  offClick?: (callback: () => void) => void;
+  setParams?: (params: {
+    text?: string;
+    color?: string;
+    text_color?: string;
+    is_active?: boolean;
+    is_visible?: boolean;
+  }) => void;
+}
+
+export interface EitaaSettingsButton {
+  isVisible?: boolean;
+  show?: () => void;
+  hide?: () => void;
+  onClick?: (callback: () => void) => void;
+  offClick?: (callback: () => void) => void;
+}
+
+export interface EitaaWebApp {
+  initData?: string;
+  initDataUnsafe?: EitaaInitDataUnsafe;
+  version?: string;
+  platform?: string;
+  colorScheme?: 'light' | 'dark';
+  themeParams?: EitaaThemeParams;
+  isExpanded?: boolean;
+  viewportHeight?: number;
+  viewportStableHeight?: number;
+  ready?: () => void;
+  expand?: () => void;
+  close?: () => void;
+  onEvent?: (eventType: string, handler: (...args: any[]) => void) => void;
+  offEvent?: (eventType: string, handler: (...args: any[]) => void) => void;
+  showAlert?: (message: string, callback?: () => void) => void;
+  showConfirm?: (message: string, callback?: (confirmed: boolean) => void) => void;
+  showPopup?: (params: {
+    title?: string;
+    message: string;
+    buttons?: Array<{ id?: string; type?: 'default' | 'ok' | 'close' | 'cancel' | 'destructive'; text?: string }>;
+  }, callback?: (buttonId: string) => void) => void;
+  setHeaderColor?: (color: string) => void;
+  setBackgroundColor?: (color: string) => void;
+  BackButton?: EitaaBackButton;
+  BottomButton?: EitaaBottomButton;
+  SettingsButton?: EitaaSettingsButton;
+  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+  openEitaaLink?: (url: string) => void;
+  sendData?: (data: string) => void;
+}
+
+declare global {
+  interface Window {
+    Eitaa?: {
+      WebApp: EitaaWebApp;
+    };
+  }
+}
+

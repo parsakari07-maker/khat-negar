@@ -1,0 +1,1433 @@
+{
+  "users": [
+    {
+      "id": "usr-parsa-admin",
+      "username": "parsa",
+      "role": "admin",
+      "password_hash": "$2b$10$EAJeTd/IO9PqXn99aqOvYOyZXgNqsQTIM3uX9.hRDLAxboe6tDR4a",
+      "is_active": true,
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-30T16:28:11.390Z",
+      "is_suspicious": false,
+      "last_login_at": "2026-08-30T16:29:04.462Z"
+    },
+    {
+      "id": "usr-demo-02",
+      "username": "user_demo",
+      "role": "user",
+      "password_hash": "$2b$10$6I9J6ro/gYZ99AhnAmWsXOXdKmV5PaLd88uhKKlzRLr8.W6R/o1.y",
+      "is_active": true,
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z",
+      "is_suspicious": false
+    },
+    {
+      "id": "usr-68bc997d",
+      "username": "user_test_6530",
+      "role": "user",
+      "password_hash": "$2b$10$IzVmeFeMKjjWIcX1TnPkzOkzLfRZk.m1OhRdnHJ7i.aDj8YoyIWGm",
+      "is_active": true,
+      "created_at": "2026-08-30T15:33:36.531Z",
+      "updated_at": "2026-08-30T15:33:36.740Z",
+      "is_suspicious": false
+    }
+  ],
+  "sessions": [
+    {
+      "id": "sess-c5307667",
+      "user_id": "usr-parsa-admin",
+      "token": "96a9e618bbd65b2ac7b23fbdbd89a4b0a4b69f1004bed73287d6d68378f043bd",
+      "ip_address": "108.181.57.53",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0",
+      "created_at": "2026-08-29T13:03:06.893Z",
+      "expires_at": "2027-08-29T13:03:06.893Z"
+    },
+    {
+      "id": "sess-15c6fcc7",
+      "user_id": "usr-parsa-admin",
+      "token": "ec89c2fb66d6b4426a9301de529b74aaaefb07e65cdf79658475aaa8971488a3",
+      "ip_address": "127.0.0.1",
+      "user_agent": "node",
+      "created_at": "2026-08-29T13:20:38.596Z",
+      "expires_at": "2027-08-29T13:20:38.596Z"
+    },
+    {
+      "id": "sess-1cb400fa",
+      "user_id": "usr-parsa-admin",
+      "token": "fabd236a4967ebd4da79f6b9fa59b38339c9bd2c66a5d330faae84fe3e5db796",
+      "ip_address": "127.0.0.1",
+      "user_agent": "node",
+      "created_at": "2026-08-29T13:21:07.191Z",
+      "expires_at": "2027-08-29T13:21:07.191Z"
+    },
+    {
+      "id": "sess-536f9fb0",
+      "user_id": "usr-parsa-admin",
+      "token": "1960b231fcfc91644f93052fb436d6972b8bb672c7473f2d8904986655561b2a",
+      "ip_address": "127.0.0.1",
+      "user_agent": "node",
+      "created_at": "2026-08-29T13:21:10.178Z",
+      "expires_at": "2027-08-29T13:21:10.178Z"
+    },
+    {
+      "id": "sess-ad4b28b8",
+      "user_id": "usr-parsa-admin",
+      "token": "e9aa56623200396b5ec6e728dc10a8d55902ae2d6064d9983946edbae0979cf1",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T15:33:36.516Z",
+      "expires_at": "2027-08-30T15:33:36.516Z"
+    },
+    {
+      "id": "sess-a472372b",
+      "user_id": "usr-parsa-admin",
+      "token": "ade59c5f237702128d97968e1b0561318071e9cff4444efcdda664a79797ec55",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:24:47.582Z",
+      "expires_at": "2027-08-30T16:24:47.582Z"
+    },
+    {
+      "id": "sess-c2f9604e",
+      "user_id": "usr-parsa-admin",
+      "token": "2f8f6b6ff5d5d417a849854fd5425a163c7aa6e31b45af35fd96fbed09545198",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:27:26.095Z",
+      "expires_at": "2027-08-30T16:27:26.095Z"
+    },
+    {
+      "id": "sess-c9c8a137",
+      "user_id": "usr-parsa-admin",
+      "token": "98f36a5043d4b7fa8a9d12d5181d5d57260180727ec4fb3ba1b94687f50cfe01",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:28:13.680Z",
+      "expires_at": "2027-08-30T16:28:13.680Z"
+    },
+    {
+      "id": "sess-8ae1c6ed",
+      "user_id": "usr-parsa-admin",
+      "token": "f6185c63b87e765f37c9b70f79d7d346a5b2098bbc052d9e6ebd196305169073",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "created_at": "2026-08-30T16:29:04.462Z",
+      "expires_at": "2027-08-30T16:29:04.462Z"
+    }
+  ],
+  "login_logs": [
+    {
+      "id": "log-1788107344461-3371",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:29:04.461Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788107293679-039b",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:28:13.679Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788107246093-bb59",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:27:26.093Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788107087581-2029",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T16:24:47.581Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788104027715-144d",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T15:33:47.714Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788104016514-299b",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-30T15:33:36.514Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "",
+      "device_info": "ناشناخته",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788009670177-813c",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-29T13:21:10.177Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "node",
+      "device_info": "مرورگر استاندارد (دستگاه نامشخص)",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788009667190-467e",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-29T13:21:07.190Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "node",
+      "device_info": "مرورگر استاندارد (دستگاه نامشخص)",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788009638595-1971",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-29T13:20:38.595Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "node",
+      "device_info": "مرورگر استاندارد (دستگاه نامشخص)",
+      "status": "success",
+      "is_suspicious": false
+    },
+    {
+      "id": "log-1788008586891-5c74",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-08-29T13:03:06.891Z",
+      "ip_address": "108.181.57.53",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0",
+      "device_info": "موزیلا فایرفاکس (ویندوز)",
+      "status": "success",
+      "is_suspicious": false
+    }
+  ],
+  "security_events": [],
+  "master_prompts": [
+    {
+      "id": "mp-1",
+      "key": "master-prompt-1",
+      "name_fa": "پرامپت مادر ۱: استاندارد و دقت حداکثری",
+      "description_fa": "تمرکز ویژه بر دقت کاراکترها و حروف، حفظ اصالت سبک خط و کیفیت فوق‌العاده بالا",
+      "sort_order": 1,
+      "active": true,
+      "version": 1,
+      "template": "Create a professional, high-quality Persian typography artwork using the exact user-provided text and specifications.\n\nUSER SPECIFICATIONS\n\nExact text:\n\"{{TITLE}}\"\n\nCalligraphic / typography style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition form:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nTarget AI model:\n\"{{AI_MODEL}}\"\n\nPRIMARY OBJECTIVE: TEXT ACCURACY\n\nThe exact requested text is:\n\n«{{TITLE}}»\n\nThis exact text is the primary and most important content of the artwork.\n\nPreserve every character, word, spacing relationship, and spelling exactly as provided.\n\nDo not translate, paraphrase, replace, remove, duplicate, invent, or add any characters or words.\n\nDo not substitute Persian characters with Latin characters or unrelated Arabic characters.\n\nThe final typography must remain clearly recognizable as the exact requested text.\n\nCALLIGRAPHIC ACCURACY\n\nUse the requested calligraphic or artistic typography style:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nRespect the characteristic proportions, strokes, curves, connections, rhythm, extensions, and visual language of the selected style.\n\nDo not replace the selected style with a generic Arabic font or unrelated lettering style.\n\nCOMPOSITION FORM\n\nUse:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nIf the selected form is geometric, the typography itself should participate in creating that form.\n\nDo not simply place ordinary text inside a separate geometric frame.\n\nUse appropriate calligraphic extensions, controlled spacing, natural letter arrangements, and suitable مفردات (individual calligraphic elements) when necessary to complete the selected composition.\n\nDo not create meaningless letters or words merely to fill the shape.\n\nThe selected geometric form must never compromise the readability or identity of the requested text.\n\nCOLOR\n\nUse the exact typography color:\n\n\"{{TITLE_COLOR_HEX}}\"\n\nThis is the primary base color of the lettering.\n\nLighting, material, highlights, and shadows may create natural tonal variations, but they must not replace the selected base color.\n\nBACKGROUND\n\nBackground setting:\n\n\"{{BACKGROUND_STATUS}}\"\n\nIf a background is requested, use:\n\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nKeep the background subordinate to the typography.\n\nIf no background is requested, do not introduce an unintended environment, scene, decorative background, texture, or object.\n\nUse a transparent-background presentation whenever supported by the selected AI model.\n\nMATERIAL, DIMENSION, LIGHTING AND SHADOWING\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nApply these settings without compromising the exact text or selected calligraphic style.\n\nShadowing should remain controlled and must not obscure important letterforms.\n\nIf shadowing is enabled, it is particularly suitable for formal and structurally strong calligraphic styles such as Thuluth, Kufi, and related styles, but it may still be applied to other styles when explicitly requested.\n\nQUALITY\n\nGenerate the highest-quality output supported by the selected AI model.\n\nUse maximum available detail, precision, clarity, clean edges, accurate rendering, refined composition, and professional-grade visual quality.\n\nNever intentionally reduce quality.\n\nFINAL PRIORITY ORDER\n\n1. Exact text accuracy\n2. Integrity of the selected calligraphic style\n3. Requested composition/form\n4. User-selected colors\n5. Material and dimensionality\n6. Lighting and shadowing\n7. Overall visual refinement\n\nThe final artwork must be professional, coherent, highly detailed, and visually refined.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "mp-2",
+      "key": "master-prompt-2",
+      "name_fa": "پرامپت مادر ۲: اصالت خط و هندسه خوشنویسی",
+      "description_fa": "تاکید بر حفظ قواعد کلاسیک و گرامر بصری خوشنویسی سنتی و تناسبات دقیق مفردات",
+      "sort_order": 2,
+      "active": true,
+      "version": 1,
+      "template": "Create an exceptionally refined Persian typography artwork based on the exact user specifications.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nCalligraphic style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nTarget AI:\n\"{{AI_MODEL}}\"\n\nPRIMARY OBJECTIVE: AUTHENTIC CALLIGRAPHY\n\nThe artwork must strongly preserve the identity and visual grammar of:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nTreat the typography as carefully composed calligraphy rather than ordinary typed text.\n\nRespect authentic letter proportions, stroke thickness, curves, connections, spacing, rhythm, vertical extensions, horizontal extensions, and overall calligraphic balance.\n\nFor traditional styles, such as Thuluth, Nastaliq, Shekasteh Nastaliq, Diwani, Kufi, Naskh, Ruq'ah, Muhaqqaq, and Rayhan, preserve the defining visual characteristics of the selected tradition.\n\nEXACT TEXT\n\nThe exact text is:\n\n«{{TITLE}}»\n\nDo not alter the text.\n\nDo not translate it.\n\nDo not add or remove characters.\n\nDo not invent letters to improve composition.\n\nThe artistic manipulation of letterforms is permitted only when it remains consistent with the selected calligraphic tradition and does not change the requested textual content.\n\nFORM THROUGH CALLIGRAPHY\n\nRequested composition:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nWhen a geometric form is selected, construct the form primarily through the arrangement and controlled extension of the actual calligraphic letterforms and appropriate مفردات.\n\nThe typography should feel as though the selected shape naturally emerges from the calligraphy.\n\nDo not place a generic geometric frame behind the text unless the selected design specifically requires a separate frame.\n\nDo not introduce meaningless writing.\n\nVISUAL PARAMETERS\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nEvery parameter must support the selected calligraphic style rather than overpower it.\n\nSHADOWING\n\nWhen enabled, apply refined and controlled shadowing to emphasize the structure and depth of the calligraphic strokes.\n\nShadowing is particularly suitable for formal and structurally strong styles such as Thuluth and Kufi.\n\nNever allow shadows to cover, merge, or obscure important letters.\n\nBACKGROUND\n\nIf background is disabled, produce a clean transparent-background result whenever the target model supports transparency.\n\nDo not invent a scene or decorative environment.\n\nQUALITY\n\nUse the highest possible image quality supported by the target AI.\n\nPrioritize precise letterforms, clean rendering, detailed edges, refined proportions, accurate materials, and professional composition.\n\nThe result should resemble carefully crafted professional Persian calligraphy.\n\nFINAL PRIORITY\n\nCalligraphic authenticity and exact text accuracy take priority over decorative effects.\n\nCreate an elegant, professional, highly refined Persian typography artwork.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "mp-3",
+      "key": "master-prompt-3",
+      "name_fa": "پرامپت مادر ۳: شکل‌گیری فرم درون‌حروفی",
+      "description_fa": "تشکیل فرم و سیلوییت کلی اثر صرفاً با چینش و کشیدگی‌های حروف و مفردات بدون کادر خارجی",
+      "sort_order": 3,
+      "active": true,
+      "version": 1,
+      "template": "Create a professional Persian typography artwork in which the requested composition is formed primarily through the typography itself.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nStyle:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nForm:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nAI model:\n\"{{AI_MODEL}}\"\n\nCOMPOSITION OBJECTIVE\n\nThe selected form is:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nThe composition must be created through the actual typography whenever possible.\n\nFor example, if a circular composition is selected, arrange and extend the calligraphic structure so that the typography itself establishes a circular visual silhouette.\n\nDo not merely put the text inside a separate circle.\n\nFor square, rectangular, diamond, or similar forms, use the natural structure of the selected lettering, controlled extensions, spacing, and appropriate مفردات to establish the intended silhouette.\n\nUSE OF MUFRADAT\n\nWhen additional visual structure is required to complete the selected form, use appropriate calligraphic مفردات and structural elements derived from the selected calligraphic tradition.\n\nThese elements may include controlled extensions, decorative calligraphic strokes, and structurally appropriate letterform components.\n\nThey must not introduce new words or unrelated textual content.\n\nNever generate random pseudo-writing simply to fill empty space.\n\nTEXT PRESERVATION\n\nThe exact text is:\n\n«{{TITLE}}»\n\nPreserve it exactly.\n\nThe selected composition must be achieved without changing the requested textual content.\n\nDo not add, remove, duplicate, translate, or replace characters.\n\nCALLIGRAPHIC STYLE\n\nUse:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nAll compositional manipulation must remain visually compatible with this style.\n\nThe composition must not turn the selected calligraphy into an unrelated font or decorative lettering system.\n\nVISUAL SETTINGS\n\nColor:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nBACKGROUND\n\nIf no background is requested, do not create an unintended environment or decorative scene.\n\nProvide transparency when supported by the target model.\n\nIf a background is requested, use the exact specified background color and maintain strong contrast with the typography.\n\nQUALITY\n\nGenerate the highest-quality output supported by the selected AI.\n\nPrioritize precise composition, clean silhouettes, accurate letterforms, detailed rendering, and professional visual balance.\n\nFINAL RESULT\n\nThe result must look like an intentionally designed typographic composition in which the requested geometric or freeform structure is produced by the calligraphy itself.\n\nThe typography remains the dominant subject at all times.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "mp-4",
+      "key": "master-prompt-4",
+      "name_fa": "پرامپت مادر ۴: رویکرد هنری، خلاقانه و بافت‌محور",
+      "description_fa": "مناسب برای جلوه‌های بصری خیره‌کننده، خلاقیت متریال و نورپردازی بدون تخریب متن",
+      "sort_order": 4,
+      "active": true,
+      "version": 1,
+      "template": "Create a highly artistic, imaginative, and professionally designed Persian typography artwork using the exact user specifications.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nTypography style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nTarget AI:\n\"{{AI_MODEL}}\"\n\nARTISTIC OBJECTIVE\n\nCreate a visually distinctive typography artwork rather than a generic text rendering.\n\nAllow the selected artistic style, material, composition, lighting, and dimensional treatment to create a strong visual identity.\n\nHowever, artistic creativity must never override the exact requested text.\n\nTEXT\n\nThe exact text is:\n\n«{{TITLE}}»\n\nPreserve it exactly.\n\nDo not translate, paraphrase, replace, remove, duplicate, or invent characters.\n\nDo not introduce random pseudo-Arabic or pseudo-Persian writing.\n\nSTYLE\n\nUse the requested style:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nFor fantasy and artistic styles, develop the requested visual characteristics through expressive curves, intentional letterform design, controlled proportions, artistic rhythm, and coherent visual language.\n\nFor traditional styles, maintain the defining characteristics of the selected calligraphic tradition.\n\nFORM\n\nUse:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nIf the selected form is geometric, integrate the form directly into the typography.\n\nUse controlled extensions, composition, and suitable مفردات to complete the silhouette when necessary.\n\nDo not simply place the typography inside a generic geometric shape.\n\nDo not invent additional textual content.\n\nMATERIAL AND EFFECTS\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimension:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nThese effects should enhance the artistic character while preserving readability.\n\nCOLOR\n\nUse:\n\n\"{{TITLE_COLOR_HEX}}\"\n\nas the primary typography color.\n\nRespect the exact requested background color:\n\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nwhen a background is enabled.\n\nBACKGROUND\n\nRespect:\n\n\"{{BACKGROUND_STATUS}}\"\n\nWhen no background is requested, avoid creating an unintended scene or decorative environment and use transparency where supported.\n\nQUALITY\n\nGenerate the highest-quality output available from the selected AI model.\n\nUse maximum visual refinement, detail, texture quality, clean edges, professional lighting, and sophisticated composition.\n\nBALANCE\n\nCreativity is encouraged, but it must remain controlled.\n\nDo not add unrelated objects, characters, symbols, words, colors, or visual themes.\n\nThe typography must remain the central subject.\n\nFINAL RESULT\n\nCreate a memorable, artistic, highly refined Persian typography artwork that combines the exact requested text with the selected style, form, color, material, lighting, and dimensional characteristics.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "mp-5",
+      "key": "master-prompt-5",
+      "name_fa": "پرامپت مادر ۵: هارمونی و تعادل همه‌جانبه",
+      "description_fa": "ایجاد تعادل جامع بین دقت متنی، اصالت خط، ترکیب‌بندی فرم و متریال برای خروجی لوکس",
+      "sort_order": 5,
+      "active": true,
+      "version": 1,
+      "template": "Create a professional Persian typography artwork that achieves a balanced combination of textual accuracy, calligraphic authenticity, composition, and visual quality.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nCalligraphic style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nAI model:\n\"{{AI_MODEL}}\"\n\nEXACT TEXT\n\nRender exactly:\n\n«{{TITLE}}»\n\nPreserve the exact spelling, characters, words, and textual structure.\n\nDo not translate, paraphrase, add, remove, duplicate, or invent characters.\n\nText accuracy is mandatory.\n\nCALLIGRAPHY\n\nUse:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nMaintain the characteristic structure and visual language of the selected style.\n\nThe result must not look like generic Arabic or Latin typography.\n\nCOMPOSITION\n\nUse:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nWhen the selected form is geometric, allow the typography itself to establish that form through appropriate arrangement, extensions, spacing, and suitable مفردات.\n\nDo not merely place ordinary text inside a geometric frame.\n\nDo not add meaningless writing to fill empty areas.\n\nVISUAL SETTINGS\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nApply all selected settings consistently.\n\nSHADOWING\n\nIf enabled, use subtle and controlled shadowing that enhances depth without reducing readability.\n\nShadowing is especially appropriate for formal styles such as Thuluth, Kufi, and similar structurally strong calligraphic styles.\n\nBACKGROUND\n\nIf background is disabled, do not introduce an unintended environment or decorative scene.\n\nUse transparent output whenever supported.\n\nIf enabled, use the exact requested background color and maintain appropriate contrast.\n\nPROFESSIONAL QUALITY\n\nGenerate the highest-quality output supported by the target AI model.\n\nUse maximum available detail, precise edges, refined letterforms, accurate material rendering, controlled lighting, strong composition, and professional visual quality.\n\nFINAL BALANCE\n\nPrioritize the following equally:\n\n1. Exact textual accuracy\n2. Authenticity of the selected typography style\n3. Correct composition\n4. Correct colors\n5. Material and dimensional treatment\n6. Lighting and shadowing\n7. Overall artistic quality\n\nDo not allow any decorative or artistic effect to compromise the exact text.\n\nThe final result should look like a professionally designed Persian typography artwork rather than a generic AI-generated text image.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    }
+  ],
+  "master_prompt_versions": [
+    {
+      "id": "v-mp-1-1",
+      "master_prompt_id": "mp-1",
+      "version": 1,
+      "template": "Create a professional, high-quality Persian typography artwork using the exact user-provided text and specifications.\n\nUSER SPECIFICATIONS\n\nExact text:\n\"{{TITLE}}\"\n\nCalligraphic / typography style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition form:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nTarget AI model:\n\"{{AI_MODEL}}\"\n\nPRIMARY OBJECTIVE: TEXT ACCURACY\n\nThe exact requested text is:\n\n«{{TITLE}}»\n\nThis exact text is the primary and most important content of the artwork.\n\nPreserve every character, word, spacing relationship, and spelling exactly as provided.\n\nDo not translate, paraphrase, replace, remove, duplicate, invent, or add any characters or words.\n\nDo not substitute Persian characters with Latin characters or unrelated Arabic characters.\n\nThe final typography must remain clearly recognizable as the exact requested text.\n\nCALLIGRAPHIC ACCURACY\n\nUse the requested calligraphic or artistic typography style:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nRespect the characteristic proportions, strokes, curves, connections, rhythm, extensions, and visual language of the selected style.\n\nDo not replace the selected style with a generic Arabic font or unrelated lettering style.\n\nCOMPOSITION FORM\n\nUse:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nIf the selected form is geometric, the typography itself should participate in creating that form.\n\nDo not simply place ordinary text inside a separate geometric frame.\n\nUse appropriate calligraphic extensions, controlled spacing, natural letter arrangements, and suitable مفردات (individual calligraphic elements) when necessary to complete the selected composition.\n\nDo not create meaningless letters or words merely to fill the shape.\n\nThe selected geometric form must never compromise the readability or identity of the requested text.\n\nCOLOR\n\nUse the exact typography color:\n\n\"{{TITLE_COLOR_HEX}}\"\n\nThis is the primary base color of the lettering.\n\nLighting, material, highlights, and shadows may create natural tonal variations, but they must not replace the selected base color.\n\nBACKGROUND\n\nBackground setting:\n\n\"{{BACKGROUND_STATUS}}\"\n\nIf a background is requested, use:\n\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nKeep the background subordinate to the typography.\n\nIf no background is requested, do not introduce an unintended environment, scene, decorative background, texture, or object.\n\nUse a transparent-background presentation whenever supported by the selected AI model.\n\nMATERIAL, DIMENSION, LIGHTING AND SHADOWING\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nApply these settings without compromising the exact text or selected calligraphic style.\n\nShadowing should remain controlled and must not obscure important letterforms.\n\nIf shadowing is enabled, it is particularly suitable for formal and structurally strong calligraphic styles such as Thuluth, Kufi, and related styles, but it may still be applied to other styles when explicitly requested.\n\nQUALITY\n\nGenerate the highest-quality output supported by the selected AI model.\n\nUse maximum available detail, precision, clarity, clean edges, accurate rendering, refined composition, and professional-grade visual quality.\n\nNever intentionally reduce quality.\n\nFINAL PRIORITY ORDER\n\n1. Exact text accuracy\n2. Integrity of the selected calligraphic style\n3. Requested composition/form\n4. User-selected colors\n5. Material and dimensionality\n6. Lighting and shadowing\n7. Overall visual refinement\n\nThe final artwork must be professional, coherent, highly detailed, and visually refined.",
+      "description_fa": "تمرکز ویژه بر دقت کاراکترها و حروف، حفظ اصالت سبک خط و کیفیت فوق‌العاده بالا",
+      "edited_by": "مدیر کل سامانه (سیستم)",
+      "created_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "v-mp-2-1",
+      "master_prompt_id": "mp-2",
+      "version": 1,
+      "template": "Create an exceptionally refined Persian typography artwork based on the exact user specifications.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nCalligraphic style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nTarget AI:\n\"{{AI_MODEL}}\"\n\nPRIMARY OBJECTIVE: AUTHENTIC CALLIGRAPHY\n\nThe artwork must strongly preserve the identity and visual grammar of:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nTreat the typography as carefully composed calligraphy rather than ordinary typed text.\n\nRespect authentic letter proportions, stroke thickness, curves, connections, spacing, rhythm, vertical extensions, horizontal extensions, and overall calligraphic balance.\n\nFor traditional styles, such as Thuluth, Nastaliq, Shekasteh Nastaliq, Diwani, Kufi, Naskh, Ruq'ah, Muhaqqaq, and Rayhan, preserve the defining visual characteristics of the selected tradition.\n\nEXACT TEXT\n\nThe exact text is:\n\n«{{TITLE}}»\n\nDo not alter the text.\n\nDo not translate it.\n\nDo not add or remove characters.\n\nDo not invent letters to improve composition.\n\nThe artistic manipulation of letterforms is permitted only when it remains consistent with the selected calligraphic tradition and does not change the requested textual content.\n\nFORM THROUGH CALLIGRAPHY\n\nRequested composition:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nWhen a geometric form is selected, construct the form primarily through the arrangement and controlled extension of the actual calligraphic letterforms and appropriate مفردات.\n\nThe typography should feel as though the selected shape naturally emerges from the calligraphy.\n\nDo not place a generic geometric frame behind the text unless the selected design specifically requires a separate frame.\n\nDo not introduce meaningless writing.\n\nVISUAL PARAMETERS\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nEvery parameter must support the selected calligraphic style rather than overpower it.\n\nSHADOWING\n\nWhen enabled, apply refined and controlled shadowing to emphasize the structure and depth of the calligraphic strokes.\n\nShadowing is particularly suitable for formal and structurally strong styles such as Thuluth and Kufi.\n\nNever allow shadows to cover, merge, or obscure important letters.\n\nBACKGROUND\n\nIf background is disabled, produce a clean transparent-background result whenever the target model supports transparency.\n\nDo not invent a scene or decorative environment.\n\nQUALITY\n\nUse the highest possible image quality supported by the target AI.\n\nPrioritize precise letterforms, clean rendering, detailed edges, refined proportions, accurate materials, and professional composition.\n\nThe result should resemble carefully crafted professional Persian calligraphy.\n\nFINAL PRIORITY\n\nCalligraphic authenticity and exact text accuracy take priority over decorative effects.\n\nCreate an elegant, professional, highly refined Persian typography artwork.",
+      "description_fa": "تاکید بر حفظ قواعد کلاسیک و گرامر بصری خوشنویسی سنتی و تناسبات دقیق مفردات",
+      "edited_by": "مدیر کل سامانه (سیستم)",
+      "created_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "v-mp-3-1",
+      "master_prompt_id": "mp-3",
+      "version": 1,
+      "template": "Create a professional Persian typography artwork in which the requested composition is formed primarily through the typography itself.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nStyle:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nForm:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nAI model:\n\"{{AI_MODEL}}\"\n\nCOMPOSITION OBJECTIVE\n\nThe selected form is:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nThe composition must be created through the actual typography whenever possible.\n\nFor example, if a circular composition is selected, arrange and extend the calligraphic structure so that the typography itself establishes a circular visual silhouette.\n\nDo not merely put the text inside a separate circle.\n\nFor square, rectangular, diamond, or similar forms, use the natural structure of the selected lettering, controlled extensions, spacing, and appropriate مفردات to establish the intended silhouette.\n\nUSE OF MUFRADAT\n\nWhen additional visual structure is required to complete the selected form, use appropriate calligraphic مفردات and structural elements derived from the selected calligraphic tradition.\n\nThese elements may include controlled extensions, decorative calligraphic strokes, and structurally appropriate letterform components.\n\nThey must not introduce new words or unrelated textual content.\n\nNever generate random pseudo-writing simply to fill empty space.\n\nTEXT PRESERVATION\n\nThe exact text is:\n\n«{{TITLE}}»\n\nPreserve it exactly.\n\nThe selected composition must be achieved without changing the requested textual content.\n\nDo not add, remove, duplicate, translate, or replace characters.\n\nCALLIGRAPHIC STYLE\n\nUse:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nAll compositional manipulation must remain visually compatible with this style.\n\nThe composition must not turn the selected calligraphy into an unrelated font or decorative lettering system.\n\nVISUAL SETTINGS\n\nColor:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nBACKGROUND\n\nIf no background is requested, do not create an unintended environment or decorative scene.\n\nProvide transparency when supported by the target model.\n\nIf a background is requested, use the exact specified background color and maintain strong contrast with the typography.\n\nQUALITY\n\nGenerate the highest-quality output supported by the selected AI.\n\nPrioritize precise composition, clean silhouettes, accurate letterforms, detailed rendering, and professional visual balance.\n\nFINAL RESULT\n\nThe result must look like an intentionally designed typographic composition in which the requested geometric or freeform structure is produced by the calligraphy itself.\n\nThe typography remains the dominant subject at all times.",
+      "description_fa": "تشکیل فرم و سیلوییت کلی اثر صرفاً با چینش و کشیدگی‌های حروف و مفردات بدون کادر خارجی",
+      "edited_by": "مدیر کل سامانه (سیستم)",
+      "created_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "v-mp-4-1",
+      "master_prompt_id": "mp-4",
+      "version": 1,
+      "template": "Create a highly artistic, imaginative, and professionally designed Persian typography artwork using the exact user specifications.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nTypography style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nTarget AI:\n\"{{AI_MODEL}}\"\n\nARTISTIC OBJECTIVE\n\nCreate a visually distinctive typography artwork rather than a generic text rendering.\n\nAllow the selected artistic style, material, composition, lighting, and dimensional treatment to create a strong visual identity.\n\nHowever, artistic creativity must never override the exact requested text.\n\nTEXT\n\nThe exact text is:\n\n«{{TITLE}}»\n\nPreserve it exactly.\n\nDo not translate, paraphrase, replace, remove, duplicate, or invent characters.\n\nDo not introduce random pseudo-Arabic or pseudo-Persian writing.\n\nSTYLE\n\nUse the requested style:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nFor fantasy and artistic styles, develop the requested visual characteristics through expressive curves, intentional letterform design, controlled proportions, artistic rhythm, and coherent visual language.\n\nFor traditional styles, maintain the defining characteristics of the selected calligraphic tradition.\n\nFORM\n\nUse:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nIf the selected form is geometric, integrate the form directly into the typography.\n\nUse controlled extensions, composition, and suitable مفردات to complete the silhouette when necessary.\n\nDo not simply place the typography inside a generic geometric shape.\n\nDo not invent additional textual content.\n\nMATERIAL AND EFFECTS\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimension:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nThese effects should enhance the artistic character while preserving readability.\n\nCOLOR\n\nUse:\n\n\"{{TITLE_COLOR_HEX}}\"\n\nas the primary typography color.\n\nRespect the exact requested background color:\n\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nwhen a background is enabled.\n\nBACKGROUND\n\nRespect:\n\n\"{{BACKGROUND_STATUS}}\"\n\nWhen no background is requested, avoid creating an unintended scene or decorative environment and use transparency where supported.\n\nQUALITY\n\nGenerate the highest-quality output available from the selected AI model.\n\nUse maximum visual refinement, detail, texture quality, clean edges, professional lighting, and sophisticated composition.\n\nBALANCE\n\nCreativity is encouraged, but it must remain controlled.\n\nDo not add unrelated objects, characters, symbols, words, colors, or visual themes.\n\nThe typography must remain the central subject.\n\nFINAL RESULT\n\nCreate a memorable, artistic, highly refined Persian typography artwork that combines the exact requested text with the selected style, form, color, material, lighting, and dimensional characteristics.",
+      "description_fa": "مناسب برای جلوه‌های بصری خیره‌کننده، خلاقیت متریال و نورپردازی بدون تخریب متن",
+      "edited_by": "مدیر کل سامانه (سیستم)",
+      "created_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "v-mp-5-1",
+      "master_prompt_id": "mp-5",
+      "version": 1,
+      "template": "Create a professional Persian typography artwork that achieves a balanced combination of textual accuracy, calligraphic authenticity, composition, and visual quality.\n\nUSER SPECIFICATIONS\n\nText:\n\"{{TITLE}}\"\n\nCalligraphic style:\n\"{{CALLIGRAPHY_STYLE}}\"\n\nComposition:\n\"{{TYPOGRAPHY_FORM}}\"\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nAI model:\n\"{{AI_MODEL}}\"\n\nEXACT TEXT\n\nRender exactly:\n\n«{{TITLE}}»\n\nPreserve the exact spelling, characters, words, and textual structure.\n\nDo not translate, paraphrase, add, remove, duplicate, or invent characters.\n\nText accuracy is mandatory.\n\nCALLIGRAPHY\n\nUse:\n\n\"{{CALLIGRAPHY_STYLE}}\"\n\nMaintain the characteristic structure and visual language of the selected style.\n\nThe result must not look like generic Arabic or Latin typography.\n\nCOMPOSITION\n\nUse:\n\n\"{{TYPOGRAPHY_FORM}}\"\n\nWhen the selected form is geometric, allow the typography itself to establish that form through appropriate arrangement, extensions, spacing, and suitable مفردات.\n\nDo not merely place ordinary text inside a geometric frame.\n\nDo not add meaningless writing to fill empty areas.\n\nVISUAL SETTINGS\n\nTypography color:\n\"{{TITLE_COLOR_HEX}}\"\n\nBackground:\n\"{{BACKGROUND_STATUS}}\"\n\nBackground color:\n\"{{BACKGROUND_COLOR_HEX}}\"\n\nMaterial:\n\"{{MATERIAL}}\"\n\nDimensionality:\n\"{{DIMENSION}}\"\n\nLighting:\n\"{{LIGHTING}}\"\n\nShadowing:\n\"{{SHADOWING}}\"\n\nAspect ratio:\n\"{{ASPECT_RATIO}}\"\n\nApply all selected settings consistently.\n\nSHADOWING\n\nIf enabled, use subtle and controlled shadowing that enhances depth without reducing readability.\n\nShadowing is especially appropriate for formal styles such as Thuluth, Kufi, and similar structurally strong calligraphic styles.\n\nBACKGROUND\n\nIf background is disabled, do not introduce an unintended environment or decorative scene.\n\nUse transparent output whenever supported.\n\nIf enabled, use the exact requested background color and maintain appropriate contrast.\n\nPROFESSIONAL QUALITY\n\nGenerate the highest-quality output supported by the target AI model.\n\nUse maximum available detail, precise edges, refined letterforms, accurate material rendering, controlled lighting, strong composition, and professional visual quality.\n\nFINAL BALANCE\n\nPrioritize the following equally:\n\n1. Exact textual accuracy\n2. Authenticity of the selected typography style\n3. Correct composition\n4. Correct colors\n5. Material and dimensional treatment\n6. Lighting and shadowing\n7. Overall artistic quality\n\nDo not allow any decorative or artistic effect to compromise the exact text.\n\nThe final result should look like a professionally designed Persian typography artwork rather than a generic AI-generated text image.",
+      "description_fa": "ایجاد تعادل جامع بین دقت متنی، اصالت خط، ترکیب‌بندی فرم و متریال برای خروجی لوکس",
+      "edited_by": "مدیر کل سامانه (سیستم)",
+      "created_at": "2026-08-29T12:11:05.272Z"
+    }
+  ],
+  "typography_styles": [
+    {
+      "id": "style-thuluth",
+      "name_fa": "ثلث",
+      "description_fa": "سبک باشکوه، کشیده و رسمی با خطوط قدرتمند و تناسبات کتیبه‌ای",
+      "category": "traditional",
+      "sort_order": 1,
+      "active": true,
+      "ai_description_en": "Traditional Arabic/Persian calligraphic style characterized by large monumental letterforms, strong vertical strokes, broad sweeping curves, pronounced elongated horizontal and vertical extensions, elegant rhythmic spacing, balanced proportions, and a highly expressive ornamental structure. The composition should feel formal, monumental, elegant, and architecturally balanced. Preserve recognizable Thuluth letter construction, strong stroke contrast, controlled curves, vertical emphasis, and characteristic elongated forms.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-nastaliq",
+      "name_fa": "نستعلیق",
+      "description_fa": "عروس خطوط اسلامی؛ سرشار از لطافت، تعلیق و شیب‌های موزون و چشم‌نواز",
+      "category": "traditional",
+      "sort_order": 2,
+      "active": true,
+      "ai_description_en": "A Persian calligraphic style characterized by flowing diagonal movement, elegant descending forms, suspended letter relationships, graceful curves, elongated strokes, varied vertical positioning, and a distinctive sense of rhythmic downward movement. The composition should feel fluid, poetic, elegant, and naturally connected. Avoid making it resemble generic Arabic typography.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-shekasteh",
+      "name_fa": "شکسته نستعلیق",
+      "description_fa": "پویا، پرانرژی و رها با اتصالات سریع، پیوستگی‌های هنرمندانه و ریتم سیال",
+      "category": "traditional",
+      "sort_order": 3,
+      "active": true,
+      "ai_description_en": "A more fluid and expressive development of Nastaliq characterized by rapid connected movements, compressed and elongated forms, dynamic diagonals, expressive curves, overlapping relationships, and energetic calligraphic rhythm. Preserve readability while allowing a more spontaneous and artistic visual flow.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-naskh",
+      "name_fa": "نسخ",
+      "description_fa": "خواناترین و منظم‌ترین سبک سنتی با تناسبات دقیق و هندسه منضبط",
+      "category": "traditional",
+      "sort_order": 4,
+      "active": true,
+      "ai_description_en": "A highly legible traditional calligraphic style characterized by balanced proportions, clear letterforms, controlled curves, moderate stroke contrast, compact spacing, and disciplined readability. The result should feel refined, orderly, classical, and highly readable rather than exaggerated or heavily ornamental.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-kufi",
+      "name_fa": "کوفی",
+      "description_fa": "ساختارمند، زاویه‌دار و هندسی؛ ایده‌آل برای ترکیبات معمارانه و سه‌بعدی",
+      "category": "traditional",
+      "sort_order": 5,
+      "active": true,
+      "ai_description_en": "A geometric and structurally strong calligraphic style characterized by angular letterforms, straight lines, balanced proportions, geometric rhythm, strong horizontal and vertical structures, and architectural composition. The style is particularly suitable for geometric typography compositions and controlled dimensional effects. Do not turn it into generic modern geometric lettering.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-diwani",
+      "name_fa": "دیوانی",
+      "description_fa": "تزئینی، منحنی و متراکم با پیچش‌های سلطنتی و قوس‌های مجلل",
+      "category": "traditional",
+      "sort_order": 6,
+      "active": true,
+      "ai_description_en": "An ornate Ottoman calligraphic tradition characterized by flowing curved forms, dense interconnections, graceful arcs, decorative rhythm, and elegant compact composition. The design may feel luxurious and ornamental while preserving the requested textual identity.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-ruqah",
+      "name_fa": "رقاع",
+      "description_fa": "کوتاه، منسجم و سریع با سادگی پالوده و ساختار بدون اضافات",
+      "category": "traditional",
+      "sort_order": 7,
+      "active": true,
+      "ai_description_en": "A compact and practical Arabic calligraphic style characterized by simplified letterforms, short controlled strokes, compact proportions, restrained ornamentation, and efficient visual structure. The result should feel concise, disciplined, and elegant rather than monumental.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-muhaqqaq",
+      "name_fa": "محقق",
+      "description_fa": "کلاسیک، کشیده و باوقار با حروف الف قامتی و کاسه‌های فراخ",
+      "category": "traditional",
+      "sort_order": 8,
+      "active": true,
+      "ai_description_en": "A classical formal calligraphic style characterized by tall elegant proportions, strong vertical elements, refined curves, balanced spacing, and carefully controlled stroke relationships. The result should feel formal, monumental, classical, and highly disciplined.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-rayhan",
+      "name_fa": "ریحان",
+      "description_fa": "ظریف، شکیل و باریک با خطوطی سبک و لطیف‌تر از محقق",
+      "category": "traditional",
+      "sort_order": 9,
+      "active": true,
+      "ai_description_en": "A refined classical calligraphic style with elegant proportions, graceful curves, delicate structure, controlled spacing, and a sophisticated visual rhythm. Preserve its classical character and avoid generic Arabic-font appearance.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-artistic-persian",
+      "name_fa": "هنری مدرن فارسی (Artistic Persian)",
+      "description_fa": "ترکیب خط ایرانی با رویکرد مینیمال و معاصر دیزاین گرافیک",
+      "category": "artistic",
+      "sort_order": 10,
+      "active": true,
+      "ai_description_en": "Contemporary modern Persian lettering blending traditional Persian calligraphic strokes with minimalist graphic design sensibilities, clean vector-like precision, dynamic contrast, and refined contemporary visual balance.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-experimental",
+      "name_fa": "خوشنویسی تجربی (Experimental Calligraphy)",
+      "description_fa": "حرکات جسورانه قلم، بافت‌های پویا و ساختارشکنی هدفمند خط",
+      "category": "artistic",
+      "sort_order": 11,
+      "active": true,
+      "ai_description_en": "Avant-garde experimental Persian calligraphy featuring energetic expressive brush strokes, bold ink dispersion, intentional deconstruction of traditional rules while maintaining textual recognizability, and high artistic tension.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-decorative",
+      "name_fa": "تزئینی اسلیمی (Decorative Persian)",
+      "description_fa": "آمیخته با موتیف‌ها، ختایی و نقوش تذهیب ایرانی در امتداد حروف",
+      "category": "artistic",
+      "sort_order": 12,
+      "active": true,
+      "ai_description_en": "Intricately decorated Persian typography where letter extensions organically weave with delicate Islimi arabesque spirals, floral motifs, and Persian illumination geometry without overwhelming the core text clarity.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-fantasy",
+      "name_fa": "فانتزی جادویی (Fantasy Calligraphic)",
+      "description_fa": "فرم‌های سیال، درخشان و رویاگون با جریان ذرات و خطوط نوری",
+      "category": "artistic",
+      "sort_order": 13,
+      "active": true,
+      "ai_description_en": "Ethereal fantasy Persian typography with mystical glowing curves, organic fluid trails, delicate ribbon-like twists, and magical luminous energy accentuating the letterforms.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-monumental",
+      "name_fa": "کتیبه‌ای یادمانی (Monumental Artistic)",
+      "description_fa": "حجیم، استوار و نمادین با بافت سنگ‌تراشی بناهای تاریخی باستان",
+      "category": "artistic",
+      "sort_order": 14,
+      "active": true,
+      "ai_description_en": "Monumental bas-relief architectural Persian lettering sculpted with heavy presence, chiseled stone edges, ancient Persian monumental scale, and dramatic volumetric depth.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-organic",
+      "name_fa": "ارگانیک طبیعی (Organic Lettering)",
+      "description_fa": "الهام‌گرفته از شاخسار، پیچک‌ها و فرم‌های زنده طبیعت",
+      "category": "artistic",
+      "sort_order": 15,
+      "active": true,
+      "ai_description_en": "Organic nature-inspired Persian typography with letterforms resembling sculpted vines, smooth polished wood roots, and botanical curves growing harmoniously into the requested text.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    },
+    {
+      "id": "style-abstract",
+      "name_fa": "انتزاعی مفهومی (Abstract Calligraphic)",
+      "description_fa": "تمرکز بر ریتم خالص خطوط، فرم و فضا در هماهنگی با متن",
+      "category": "artistic",
+      "sort_order": 16,
+      "active": true,
+      "ai_description_en": "Abstract conceptual Persian lettering emphasizing high-contrast spatial interplay, fluid ribbon geometries, geometric intersections, and sculptural balance while preserving exact text integrity.",
+      "created_at": "2026-08-29T12:11:05.272Z",
+      "updated_at": "2026-08-29T12:11:05.272Z"
+    }
+  ],
+  "typography_forms": [
+    {
+      "id": "form-free",
+      "name_fa": "ترکیب آزاد و طبیعی",
+      "description_fa": "ترکیب‌بندی طبیعی و آزاد خط بر اساس جریان ارگانیک کلمات",
+      "ai_instruction_en": "Freeform natural composition following the organic flow and traditional line rhythm of Persian calligraphy without bounding geometric constraints.",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "form-circle",
+      "name_fa": "ترکیب دایره",
+      "description_fa": "سیلوییت دایره‌ای که از طریق کشیدگی حروف و مفردات شکل می‌گیرد",
+      "ai_instruction_en": "Circular composition silhouette. CRITICAL: Construct the circular visual silhouette primarily through the arrangement, sweeping curved extensions, and authentic calligraphic مفردات of the actual Persian letters themselves. Do NOT place normal text inside a separate geometric boundary circle; the typography itself must organically form the circle silhouette while strictly preserving the exact text.",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "form-square",
+      "name_fa": "ترکیب مربع",
+      "description_fa": "ترکیب منسجم مربعی با بهره‌گیری از خطوط افقی، عمودی و کشیده‌ها",
+      "ai_instruction_en": "Square composition silhouette. CRITICAL: The square silhouette must be established naturally by the horizontal and vertical stroke structure, balanced margins, and controlled calligraphic extensions of the Persian letters without drawing an artificial outer box.",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "form-rectangle",
+      "name_fa": "ترکیب مستطیل",
+      "description_fa": "کادربندی افقی یا عمودی متوازن با تکیه بر کشیدگی‌های اصیل",
+      "ai_instruction_en": "Rectangular composition silhouette formed through authentic elongated horizontal calligraphic extensions (kashida) and vertical ascenders naturally outlining a rectangular boundary without an arbitrary frame.",
+      "sort_order": 4,
+      "active": true
+    },
+    {
+      "id": "form-geometric-simple",
+      "name_fa": "فرم هندسی متقارن",
+      "description_fa": "هندسه متقارن و منظم برآمده از تناسبات خوشنویسی",
+      "ai_instruction_en": "Disciplined geometric silhouette formed through symmetrical balance, clean angular axes, and structured calligraphic elements of the text itself.",
+      "sort_order": 5,
+      "active": true
+    }
+  ],
+  "materials": [
+    {
+      "id": "mat-none",
+      "name_fa": "طبیعی و استاندارد",
+      "ai_description_en": "Standard authentic Persian typography rendering with clean natural finish and no artificial simulated material overlay",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "mat-ink",
+      "name_fa": "مرکب سنتی خوشنویسی",
+      "ai_description_en": "Rich Persian calligraphic ink (morakkab) with subtle natural sheen, velvety texture, and authentic edge bleeding on fine handmade paper",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "mat-cardboard",
+      "name_fa": "مقوا و کرافت بافت‌دار",
+      "ai_description_en": "Textured fibrous cardboard paper with tactile matte surface, visible organic paper pulp fibers, and elegant tactile finish",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "mat-paper",
+      "name_fa": "کاغذ دست‌ساز آهرمهره",
+      "ai_description_en": "Authentic handmade Persian calligraphic glazed Ahar-Mohreh paper with delicate parchment texture and smooth surface",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "mat-metal",
+      "name_fa": "فلز براق، طلا و برنج",
+      "ai_description_en": "Polished metallic material with luxurious golden/brass reflections, subtle micro-scratches, and realistic anisotropic specular highlights",
+      "sort_order": 4,
+      "active": true
+    },
+    {
+      "id": "mat-stone",
+      "name_fa": "سنگ تراش‌خورده و مرمر",
+      "ai_description_en": "Chiseled polished marble stone with fine mineral veining, micro-chips on sharp relief edges, and authentic rock density",
+      "sort_order": 5,
+      "active": true
+    },
+    {
+      "id": "mat-wood",
+      "name_fa": "چوب طبیعی منبت‌کاری",
+      "ai_description_en": "Hand-carved premium walnut wood with fine organic grain patterns, satin varnish, and tactile fiber depth",
+      "sort_order": 6,
+      "active": true
+    },
+    {
+      "id": "mat-glass",
+      "name_fa": "شیشه و بلور کریستالی",
+      "ai_description_en": "Refractive optical crystal glass with frosted beveled edges, internal caustics, and pristine transparency",
+      "sort_order": 7,
+      "active": true
+    },
+    {
+      "id": "mat-clay",
+      "name_fa": "سفال لعاب‌دار فیروزه‌ای",
+      "ai_description_en": "Persian handcrafted ceramic clay with glossy turquoise/enameled glaze and authentic artisanal crazing craquelure",
+      "sort_order": 8,
+      "active": true
+    },
+    {
+      "id": "mat-fabric",
+      "name_fa": "پارچه مخمل و ابریشم زردوزی",
+      "ai_description_en": "Embroidered royal velvet and silk fabric with woven gold threading (Zari) and soft micro-fiber sheen",
+      "sort_order": 9,
+      "active": true
+    },
+    {
+      "id": "mat-painted",
+      "name_fa": "رنگ روغن نقاشی‌خط",
+      "ai_description_en": "Textured impasto oil paint naqashi-khat with visible palette knife strokes, thick paint body, and rich layering",
+      "sort_order": 10,
+      "active": true
+    },
+    {
+      "id": "mat-digital",
+      "name_fa": "وکتور دیجیتال خطی و دقیق",
+      "ai_description_en": "Crisp vector graphic rendering with mathematically sharp edges, smooth gradients, and immaculate modern finish",
+      "sort_order": 11,
+      "active": true
+    }
+  ],
+  "dimension_options": [
+    {
+      "id": "dim-none",
+      "name_fa": "طبیعی و بدون بعد",
+      "ai_description_en": "Natural balanced 2D typographic plane with clean edges and standard line weight",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "dim-flat",
+      "name_fa": "تخت دو‌بعدی",
+      "ai_description_en": "Pure flat 2D graphic design presentation with crisp outlines and zero bevel distortion",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "dim-slight",
+      "name_fa": "برجستگی ملایم",
+      "ai_description_en": "Subtle micro-relief dimensionality giving gentle tactile volume without overpowering letter readability",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "dim-embossed",
+      "name_fa": "برجسته منبت‌کاری",
+      "ai_description_en": "Refined embossed relief pressed delicately from the background with crisp beveled edges",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "dim-raised",
+      "name_fa": "برآمده حجیم",
+      "ai_description_en": "Prominently raised volumetric lettering hovering with tactile depth and clear edge separation",
+      "sort_order": 4,
+      "active": true
+    },
+    {
+      "id": "dim-3d-deep",
+      "name_fa": "سه‌بعدی عمیق و مجسمه‌گون",
+      "ai_description_en": "Full deep sculptural 3D dimensional extrusion with architectural presence and dramatic depth",
+      "sort_order": 5,
+      "active": true
+    }
+  ],
+  "lighting_options": [
+    {
+      "id": "light-none",
+      "name_fa": "نور طبیعی و خنثی",
+      "ai_description_en": "Neutral, clean, balanced daylight lighting with even distribution and natural clarity",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "light-soft",
+      "name_fa": "نرم و یکنواخت استودیویی",
+      "ai_description_en": "Diffused soft studio lighting with gentle gradient falloff and zero harsh glare",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "light-natural",
+      "name_fa": "نور گرم خورشید و زاویه‌دار",
+      "ai_description_en": "Warm natural golden-hour daylight cascading at an angle with realistic atmospheric warmth",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "light-studio",
+      "name_fa": "نورپردازی سه‌نقطه‌ای حرفه‌ای",
+      "ai_description_en": "Three-point studio lighting with balanced key, fill, and crisp rim light highlighting stroke contours",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "light-dramatic",
+      "name_fa": "دراماتیک و پرکنتراست",
+      "ai_description_en": "Dramatic high-contrast chiaroscuro lighting emphasizing form, volume, and artistic mood",
+      "sort_order": 4,
+      "active": true
+    },
+    {
+      "id": "light-directional",
+      "name_fa": "جهت‌دار زاویه‌ای مماس",
+      "ai_description_en": "Low-angle raking directional light casting micro-shadows along the calligraphic stroke edges to emphasize texture",
+      "sort_order": 5,
+      "active": true
+    },
+    {
+      "id": "light-cinematic",
+      "name_fa": "سینمایی با هاله نوری",
+      "ai_description_en": "Cinematic rim-lit atmosphere with subtle volumetric haze and pristine optical tone curve",
+      "sort_order": 6,
+      "active": true
+    }
+  ],
+  "shadow_options": [
+    {
+      "id": "shadow-none",
+      "name_fa": "بدون سایه",
+      "ai_description_en": "No drop shadow; clean isolated typography floating crisply",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "shadow-soft",
+      "name_fa": "سایه نرم و ملایم",
+      "ai_description_en": "Soft diffused contact shadow that anchors the typography subtly without obscuring any letterforms",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "shadow-controlled",
+      "name_fa": "سایه کنترل‌شده و دقیق",
+      "ai_description_en": "Controlled directional shadow providing structured depth while strictly ensuring zero shadow overlap over vital characters",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "shadow-deep",
+      "name_fa": "سایه عمیق و برجسته",
+      "ai_description_en": "Deep rich cast shadow creating strong separation from the surface while preserving character legibility",
+      "sort_order": 4,
+      "active": true
+    }
+  ],
+  "aspect_ratio_options": [
+    {
+      "id": "ar-1-1",
+      "name_fa": "مربع (۱:۱)",
+      "value": "1:1",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "ar-4-5",
+      "name_fa": "عمودی اینستاگرام (۴:۵)",
+      "value": "4:5",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "ar-3-4",
+      "name_fa": "عمودی استاندارد (۳:۴)",
+      "value": "3:4",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "ar-4-3",
+      "name_fa": "افقی کلاسیک (۴:۳)",
+      "value": "4:3",
+      "sort_order": 4,
+      "active": true
+    },
+    {
+      "id": "ar-16-9",
+      "name_fa": "افقی عریض (۱۶:۹)",
+      "value": "16:9",
+      "sort_order": 5,
+      "active": true
+    },
+    {
+      "id": "ar-9-16",
+      "name_fa": "استوری و ریلز (۹:۱۶)",
+      "value": "9:16",
+      "sort_order": 6,
+      "active": true
+    }
+  ],
+  "ai_models": [
+    {
+      "id": "model-generic",
+      "name_fa": "مدل عمومی هوش مصنوعی",
+      "model_key": "generic-image-generator",
+      "ai_name_en": "Generic Flagship Image Generator",
+      "description_fa": "پرامپت استاندارد سازگار با تمام موتورهای تولید تصویر معتبر",
+      "sort_order": 1,
+      "active": true
+    },
+    {
+      "id": "model-gemini",
+      "name_fa": "جمینای ایمیج",
+      "model_key": "gemini-image",
+      "ai_name_en": "Google Gemini Image Model",
+      "description_fa": "بهینه‌سازی شده اختصاصی برای مدل‌های تصویرساز گوگل جمینای و درک عمیق زبان طبیعی",
+      "sort_order": 2,
+      "active": true
+    },
+    {
+      "id": "model-midjourney",
+      "name_fa": "میدجورنی",
+      "model_key": "midjourney",
+      "ai_name_en": "Midjourney v6.1 / v7 Calligraphic Mode",
+      "description_fa": "فرمت‌بندی دقیق پارامترها و کلمات کلیدی موثر در میدجورنی",
+      "sort_order": 3,
+      "active": true
+    },
+    {
+      "id": "model-flux",
+      "name_fa": "فلاکس",
+      "model_key": "flux-1",
+      "ai_name_en": "FLUX.1 Pro Typography Engine",
+      "description_fa": "تنظیمات با دقت رندر متن در مدل‌های نسل جدید فلاکس",
+      "sort_order": 4,
+      "active": true
+    },
+    {
+      "id": "model-dalle3",
+      "name_fa": "دال-ای ۳",
+      "model_key": "dall-e-3",
+      "ai_name_en": "OpenAI DALL-E 3 Text Rendering Engine",
+      "description_fa": "ساختار توصیفی دقیق برای ممانعت از ایجاد پس‌زمینه‌ها یا کاراکترهای تصادفی در DALL-E",
+      "sort_order": 5,
+      "active": true
+    }
+  ],
+  "app_settings": {
+    "site_title": "سامانه مهندسی پرامپت تایپوگرافی فارسی",
+    "site_title_fa": "خط نگار",
+    "site_badge_fa": "تایپوگرافی هوشمند",
+    "site_subtitle_fa": "سامانه تخصصی مهندسی پرامپت خط، خوشنویسی و تایپوگرافی فارسی",
+    "header_generator_btn_fa": "تولید پرامپت",
+    "header_admin_btn_fa": "پنل مدیریت",
+    "custom_logo_url": "",
+    "feedback_badge_fa": "صدای شما، پیشرفت ما",
+    "feedback_title_fa": "اعلام گزارش و پیشنهادات",
+    "feedback_subtitle_fa": "دیدگاه‌ها، پیشنهادات بهبود، یا گزارش خطاهای احتمالی خود را برای ارتقای سامانه با ما در میان بگذارید.",
+    "feedback_type_label_fa": "نوع پیام",
+    "feedback_input_title_label_fa": "عنوان گزارش یا پیشنهاد",
+    "feedback_input_title_placeholder_fa": "مثال: پیشنهاد افزودن فرم هندسی شمسه، گزارش عدم تطابق رنگ و...",
+    "feedback_input_desc_label_fa": "توضیحات تکمیلی",
+    "feedback_input_desc_placeholder_fa": "نکات و توضیحات مورد نظر خود را با جزئیات بنویسید...",
+    "feedback_submit_btn_fa": "ارسال گزارش یا پیشنهاد",
+    "feedback_success_msg_fa": "پیام شما با موفقیت ثبت شد و توسط مدیران سامانه بررسی خواهد شد. سپاس از همراهی شما!",
+    "login_badge_fa": "تایپوگرافی هوشمند",
+    "login_title_fa": "خط نگار",
+    "login_subtitle_fa": "سامانه تخصصی مهندسی پرامپت خط، خوشنویسی و تایپوگرافی فارسی",
+    "login_username_label_fa": "نام کاربری",
+    "login_username_placeholder_fa": "نام کاربری شما",
+    "login_password_label_fa": "رمز عبور",
+    "login_password_placeholder_fa": "رمز عبور شما",
+    "login_button_fa": "ورود به سامانه",
+    "login_notice_fa": "ایجاد و فعال‌سازی حساب‌های کاربری صرفاً توسط مدیریت سامانه انجام می‌پذیرد.",
+    "welcome_badge_fa": "ورود با موفقیت انجام شد",
+    "welcome_title_fa": "خوش آمدید، {username}",
+    "welcome_subtitle_admin_fa": "دسترسی: مدیریت ارشد سامانه",
+    "welcome_subtitle_user_fa": "دسترسی: کاربری سامانه مهندسی پرامپت",
+    "welcome_loading_text_fa": "در حال آماده‌سازی و انتقال به محیط کاربری...",
+    "generator_top_badge_fa": "مهندسی هوشمند پرامپت‌های خوشنویسی و تایپوگرافی اصیل",
+    "generator_heading_fa": "مولد تخصصی پرامپت تایپوگرافی",
+    "generator_subtitle_fa": "مشخصات هنری مدنظر خود را مشخص کنید؛ سامانه دقیق‌ترین پرامپت انگلیسی را با حفظ ۱۰۰٪ املای کلمات تولید می‌کند.",
+    "generator_sample_btn_fa": "بارگذاری نمونه آزمایشی (ایران من)",
+    "generator_input_label_fa": "عنوان و متن دقیق تایپوگرافی",
+    "generator_input_placeholder_fa": "متن یا عبارت خوشنویسی خود را بنویسید (مثال: ایران من، عشق، مولانا، یا علی)...",
+    "generator_submit_btn_fa": "تولید پرامپت تخصصی تایپوگرافی",
+    "generator_again_btn_fa": "تولید دوباره (پرامپت بعدی)",
+    "generator_result_title_fa": "پرامپت نهایی تولید شده (انگلیسی)",
+    "generator_result_subtitle_fa": "این پرامپت آماده استفاده در ابزارهای هوش مصنوعی تصویرساز است.",
+    "footer_title_fa": "سامانه تخصصی مهندسی پرامپت تایپوگرافی فارسی",
+    "footer_subtitle_fa": "تولید هوشمند دستورات خوشنویسی اصیل سنتی و مدرن با حفظ ۱۰۰٪ دقت کاراکترها",
+    "default_style_id": "style-thuluth",
+    "default_form_id": "form-free",
+    "default_material_id": "mat-none",
+    "default_dimension_id": "dim-none",
+    "default_lighting_id": "light-none",
+    "default_shadow_id": "shadow-none",
+    "default_aspect_ratio_id": "ar-1-1",
+    "default_ai_model_id": "model-generic",
+    "allow_prompt_cycling": true,
+    "rate_limit_per_minute": 20,
+    "suspicious_ip_threshold": 3,
+    "failed_login_threshold": 5
+  },
+  "admin_audit_logs": [
+    {
+      "id": "audit-1788107344699-e282",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.699Z"
+    },
+    {
+      "id": "audit-1788107344693-b782",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.693Z"
+    },
+    {
+      "id": "audit-1788107344691-4352",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.691Z"
+    },
+    {
+      "id": "audit-1788107344687-8a0f",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.687Z"
+    },
+    {
+      "id": "audit-1788107344684-71b1",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» ویرایش شد (نسخه جدید: 2).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.684Z"
+    },
+    {
+      "id": "audit-1788107344681-7cbf",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن پرامپت مادر",
+      "details": "پرامپت مادر جدید «پرامپت آزمایشی جدید» با موفقیت افزوده شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.681Z"
+    },
+    {
+      "id": "audit-1788107344675-8011",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107344464» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.675Z"
+    },
+    {
+      "id": "audit-1788107344671-baef",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_1788107344464» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.671Z"
+    },
+    {
+      "id": "audit-1788107344571-d617",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107344464» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.571Z"
+    },
+    {
+      "id": "audit-1788107344564-bcb6",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107344464» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:29:04.564Z"
+    },
+    {
+      "id": "audit-1788107293949-30a8",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.949Z"
+    },
+    {
+      "id": "audit-1788107293939-5020",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.939Z"
+    },
+    {
+      "id": "audit-1788107293936-a6a0",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.936Z"
+    },
+    {
+      "id": "audit-1788107293932-e1c0",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.932Z"
+    },
+    {
+      "id": "audit-1788107293929-ce82",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی ویرایش شده» ویرایش شد (نسخه جدید: 2).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.929Z"
+    },
+    {
+      "id": "audit-1788107293925-791e",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن پرامپت مادر",
+      "details": "پرامپت مادر جدید «پرامپت آزمایشی جدید» با موفقیت افزوده شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.925Z"
+    },
+    {
+      "id": "audit-1788107293918-363d",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107293683» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.919Z"
+    },
+    {
+      "id": "audit-1788107293914-3f2c",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_1788107293683» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.914Z"
+    },
+    {
+      "id": "audit-1788107293810-b028",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107293683» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.810Z"
+    },
+    {
+      "id": "audit-1788107293802-47ed",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107293683» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:28:13.802Z"
+    },
+    {
+      "id": "audit-1788107246371-c080",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.371Z"
+    },
+    {
+      "id": "audit-1788107246364-df87",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.364Z"
+    },
+    {
+      "id": "audit-1788107246361-8a31",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.361Z"
+    },
+    {
+      "id": "audit-1788107246358-114c",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف پرامپت مادر",
+      "details": "پرامپت مادر «پرامپت آزمایشی جدید» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.358Z"
+    },
+    {
+      "id": "audit-1788107246352-9ddb",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن پرامپت مادر",
+      "details": "پرامپت مادر جدید «پرامپت آزمایشی جدید» با موفقیت افزوده شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.352Z"
+    },
+    {
+      "id": "audit-1788107246346-3f7c",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107246099» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.346Z"
+    },
+    {
+      "id": "audit-1788107246341-3e37",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_1788107246099» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.341Z"
+    },
+    {
+      "id": "audit-1788107246233-14b2",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107246099» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.233Z"
+    },
+    {
+      "id": "audit-1788107246225-47b6",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107246099» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:27:26.225Z"
+    },
+    {
+      "id": "audit-1788107087737-b15a",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش تنظیمات و سرخط‌های سامانه",
+      "details": "تنظیمات عمومی، سرخط‌ها، عناوین صفحه ورود، کارت خوش‌آمدگویی و مولد پرامپت به‌روزرسانی شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.737Z"
+    },
+    {
+      "id": "audit-1788107087732-0645",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف سبک خوشنویسی",
+      "details": "سبک «خط کوفی مغربی» حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.732Z"
+    },
+    {
+      "id": "audit-1788107087729-0cc9",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "افزودن سبک خوشنویسی",
+      "details": "سبک جدید «خط کوفی مغربی» به سامانه اضافه شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.729Z"
+    },
+    {
+      "id": "audit-1788107087719-5aa5",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_1788107087584» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.719Z"
+    },
+    {
+      "id": "audit-1788107087714-deb2",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ویرایش مشخصات کاربر",
+      "details": "کاربر «user_test_1788107087584» ویرایش شد (وضعیت: غیرفعال).",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.714Z"
+    },
+    {
+      "id": "audit-1788107087707-528b",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_1788107087584» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T16:24:47.707Z"
+    },
+    {
+      "id": "audit-1788104027947-ea4e",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «user_test_7727» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T15:33:47.947Z"
+    },
+    {
+      "id": "audit-1788104027942-9577",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "پاکسازی داده‌های قدیمی دیتابیس",
+      "details": "پاکسازی all برای رکوردهای قدیمی‌تر از 365 روز. مجموع رکوردهای حذف‌شده: 0",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T15:33:47.942Z"
+    },
+    {
+      "id": "audit-1788104027930-0482",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_7727» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T15:33:47.930Z"
+    },
+    {
+      "id": "audit-1788104027830-2092",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_7727» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T15:33:47.830Z"
+    },
+    {
+      "id": "audit-1788104016741-8c7f",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "تغییر رمز عبور کاربر",
+      "details": "رمز عبور کاربر «user_test_6530» توسط مدیر بازنشانی شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T15:33:36.741Z"
+    },
+    {
+      "id": "audit-1788104016640-3415",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «user_test_6530» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-30T15:33:36.640Z"
+    },
+    {
+      "id": "audit-1788005465361",
+      "admin_id": "usr-admin-01",
+      "admin_username": "admin",
+      "action": "راه‌اندازی اولیه سامانه",
+      "details": "پایگاه داده، پرامپت‌های مادر ۵‌گانه و سبک‌های خوشنویسی با موفقیت بارگذاری شدند.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-08-29T12:11:05.272Z"
+    }
+  ],
+  "generation_logs": [
+    {
+      "id": "gen-1788104027724-49f9",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "master_prompt_id": "mp-2",
+      "master_prompt_name": "پرامپت مادر ۲: اصالت خط و هندسه خوشنویسی",
+      "ai_model_id": "model-midjourney",
+      "style_id": "style-nastaliq",
+      "form_id": "form-freestyle",
+      "is_generate_again": true,
+      "timestamp": "2026-08-30T15:33:47.724Z"
+    },
+    {
+      "id": "gen-1788104027721-e958",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "master_prompt_id": "mp-1",
+      "master_prompt_name": "پرامپت مادر ۱: استاندارد و دقت حداکثری",
+      "ai_model_id": "model-midjourney",
+      "style_id": "style-nastaliq",
+      "form_id": "form-freestyle",
+      "is_generate_again": false,
+      "timestamp": "2026-08-30T15:33:47.721Z"
+    },
+    {
+      "id": "gen-1788104016527-9e50",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "master_prompt_id": "mp-2",
+      "master_prompt_name": "پرامپت مادر ۲: اصالت خط و هندسه خوشنویسی",
+      "ai_model_id": "model-midjourney",
+      "style_id": "style-nastaliq",
+      "form_id": "form-freestyle",
+      "is_generate_again": true,
+      "timestamp": "2026-08-30T15:33:36.527Z"
+    },
+    {
+      "id": "gen-1788104016523-b28f",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "master_prompt_id": "mp-1",
+      "master_prompt_name": "پرامپت مادر ۱: استاندارد و دقت حداکثری",
+      "ai_model_id": "model-midjourney",
+      "style_id": "style-nastaliq",
+      "form_id": "form-freestyle",
+      "is_generate_again": false,
+      "timestamp": "2026-08-30T15:33:36.523Z"
+    },
+    {
+      "id": "gen-1788009670193-b7dc",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "master_prompt_id": "mp-1",
+      "master_prompt_name": "پرامپت مادر ۱: استاندارد و دقت حداکثری",
+      "ai_model_id": "midjourney_v6",
+      "style_id": "nastaliq",
+      "form_id": "classic",
+      "is_generate_again": false,
+      "timestamp": "2026-08-29T13:21:10.193Z"
+    }
+  ],
+  "feedback_reports": [
+    {
+      "id": "fb-1788107344457-634cc6",
+      "username": "کاربر آزمایشی",
+      "type": "report",
+      "title": "گزارش خطای آزمایشی",
+      "description": "تست ارسال از روت جایگزین فیدبک",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:29:04.457Z"
+    },
+    {
+      "id": "fb-1788107344452-20be09",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:29:04.452Z"
+    },
+    {
+      "id": "fb-1788107293675-22c6b4",
+      "username": "کاربر آزمایشی",
+      "type": "report",
+      "title": "گزارش خطای آزمایشی",
+      "description": "تست ارسال از روت جایگزین فیدبک",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:28:13.675Z"
+    },
+    {
+      "id": "fb-1788107293667-de1298",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:28:13.668Z"
+    },
+    {
+      "id": "fb-1788107246085-d120e2",
+      "username": "کاربر آزمایشی",
+      "type": "report",
+      "title": "گزارش خطای آزمایشی",
+      "description": "تست ارسال از روت جایگزین فیدبک",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:27:26.085Z"
+    },
+    {
+      "id": "fb-1788107246080-1f1828",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:27:26.080Z"
+    },
+    {
+      "id": "fb-1788107087573-4c0c8d",
+      "username": "کاربر مهمان / ناشناس",
+      "type": "suggestion",
+      "title": "پیشنهاد افزودن سبک خط رقاع",
+      "description": "پیشنهاد می‌شود سبک خط رقاع نیز به دسته‌بندی سنتی اضافه شود.",
+      "status": "unread",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-08-30T16:24:47.574Z"
+    }
+  ]
+}

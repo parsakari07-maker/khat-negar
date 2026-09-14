@@ -9,7 +9,8 @@ import {
   User,
   LayoutDashboard,
   Wand2,
-  MessageSquarePlus
+  MessageSquarePlus,
+  Crown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useSettings } from '../context/SettingsContext.js';
@@ -138,9 +139,25 @@ export function Header({ currentView, onChangeView, onOpenLogin, onOpenFeedback 
           {user ? (
             <div className="flex items-center gap-2">
               <div className="hidden md:flex flex-col text-left pl-2">
-                <span className="text-xs font-bold text-[var(--text-primary)]">{user.username}</span>
-                <span className="text-[10px] text-[var(--text-muted)]">
-                  {user.role === 'admin' ? 'مدیر ارشد سامانه' : 'کاربر ویژه'}
+                <div className="flex items-center gap-1.5 justify-end">
+                  <span className="text-xs font-bold text-[var(--text-primary)]">{user.username}</span>
+                  {user.is_unlimited || user.role === 'admin' ? (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold text-[10px]">
+                      <Crown className="w-3 h-3 text-amber-500" />
+                      <span>{user.role === 'admin' ? 'مدیر' : 'نامحدود'}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-muted)] text-[10px] font-medium">
+                      رایگان
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-[var(--text-muted)] text-right">
+                  {user.role === 'admin'
+                    ? 'مدیر ارشد سامانه'
+                    : user.is_unlimited
+                      ? 'اشتراک نامحدود فعال'
+                      : `سقف امروز: ${user.daily_primary_remaining ?? 1} از ۱`}
                 </span>
               </div>
               <button

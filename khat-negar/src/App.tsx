@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
 import { LogoProvider } from './context/LogoContext.js';
 import { SettingsProvider, useSettings } from './context/SettingsContext.js';
+import { EitaaProvider } from './context/EitaaContext.js';
 import { Header } from './components/Header.js';
 import { GeneratorView } from './components/GeneratorView.js';
 import { AdminLayout } from './components/AdminPanel/AdminLayout.js';
@@ -160,9 +161,11 @@ export default function App() {
   return (
     <SettingsProvider>
       <AuthProvider>
-        <LogoProvider>
-          <AppContent />
-        </LogoProvider>
+        <EitaaProvider>
+          <LogoProvider>
+            <AppContent />
+          </LogoProvider>
+        </EitaaProvider>
       </AuthProvider>
     </SettingsProvider>
   );

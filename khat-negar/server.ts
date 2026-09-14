@@ -207,6 +207,140 @@ async function startServer() {
     }
   );
 
+  // Self-Service User Registration (Public)
+  app.post(
+    '/api/auth/register',
+    rateLimit(10, 60 * 1000, 'register'),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { username, password } = req.body;
+        if (!username || !password) {
+          return res.status(400).json({
+            success: false,
+            error: 'نام کاربری و رمز عبور الزامی است.'
+          });
+        }
+
+        const newUser = db.registerUser(String(username), String(password), req.deviceFingerprint);
+
+        // Auto-login session for seamless user onboarding
+        const token = db.createSession(
+          newUser.id,
+          req.clientIp || '127.0.0.1',
+          req.clientUserAgent || ''
+        );
+
+        db.recordLoginLog({
+          userId: newUser.id,
+          username: newUser.username,
+          ip: req.clientIp || '127.0.0.1',
+          userAgent: req.clientUserAgent || '',
+          deviceInfo: req.deviceInfo || '',
+          status: 'success',
+          reason: 'ثبت‌نام مستقیم و ورود اولیه کاربر جدید'
+        });
+
+        res.cookie('auth_token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 365 * 24 * 60 * 60 * 1000
+        });
+
+        return res.json({
+          success: true,
+          token,
+          user: newUser,
+          message: 'حساب کاربری شما با موفقیت ایجاد و فعال شد.'
+        });
+      } catch (err: any) {
+        return res.status(400).json({
+          success: false,
+          error: err.message || 'خطا در ثبت‌نام حساب کاربری.'
+        });
+      }
+    }
+  );
+
+  // Eitaa Mini App (Barnamak) Single Sign-On (SSO)
+  app.post(
+    '/api/auth/eitaa',
+    rateLimit(30, 60 * 1000, 'eitaa_auth'),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const rawEitaaUser = req.body?.eitaaUser || req.body?.user || req.body;
+        const eitaaId = rawEitaaUser?.id;
+
+        if (!eitaaId) {
+          return res.status(400).json({
+            success: false,
+            error: 'شناسه کاربر ایتا ارسال نشده است.'
+          });
+        }
+
+        const authenticatedUser = db.createOrUpdateEitaaUser({
+          id: eitaaId,
+          first_name: rawEitaaUser.first_name ? String(rawEitaaUser.first_name).trim() : undefined,
+          last_name: rawEitaaUser.last_name ? String(rawEitaaUser.last_name).trim() : undefined,
+          username: rawEitaaUser.username ? String(rawEitaaUser.username).trim() : undefined,
+          photo_url: rawEitaaUser.photo_url ? String(rawEitaaUser.photo_url).trim() : undefined
+        }, req.deviceFingerprint);
+
+        if (!authenticatedUser.is_active) {
+          db.recordLoginLog({
+            userId: authenticatedUser.id,
+            username: authenticatedUser.username,
+            ip: req.clientIp || '127.0.0.1',
+            userAgent: req.clientUserAgent || '',
+            deviceInfo: `${req.deviceInfo || ''} [برنامک ایتا]`,
+            status: 'failed',
+            reason: 'حساب کاربری در ایتا مسدود است'
+          });
+          return res.status(403).json({
+            success: false,
+            error: 'حساب کاربری شما غیرفعال شده است. لطفاً با مدیر سامانه تماس بگیرید.'
+          });
+        }
+
+        // Record successful login log
+        db.recordLoginLog({
+          userId: authenticatedUser.id,
+          username: authenticatedUser.username,
+          ip: req.clientIp || '127.0.0.1',
+          userAgent: req.clientUserAgent || '',
+          deviceInfo: `${req.deviceInfo || ''} [برنامک ایتا]`,
+          status: 'success'
+        });
+
+        const token = db.createSession(
+          authenticatedUser.id,
+          req.clientIp || '127.0.0.1',
+          req.clientUserAgent || ''
+        );
+
+        res.cookie('auth_token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 365 * 24 * 60 * 60 * 1000
+        });
+
+        return res.json({
+          success: true,
+          token,
+          user: authenticatedUser,
+          message: 'ورود خودکار از طریق برنامک ایتا با موفقیت انجام شد.'
+        });
+      } catch (err: any) {
+        console.error('Eitaa SSO error:', err);
+        return res.status(500).json({
+          success: false,
+          error: err.message || 'خطا در احراز هویت برنامک ایتا.'
+        });
+      }
+    }
+  );
+
   // Logout
   app.post('/api/auth/logout', (req: AuthenticatedRequest, res) => {
     const token = req.cookies?.auth_token || req.headers.authorization?.replace('Bearer ', '');
@@ -220,14 +354,27 @@ async function startServer() {
   // Get Session User (unified endpoints)
   const handleGetSession = (req: AuthenticatedRequest, res: express.Response) => {
     if (!req.user) {
-      return res.json({ success: true, user: null });
+      const guestUsage = db.getUserDailyUsage(undefined, {
+        deviceFingerprint: req.deviceFingerprint
+      });
+      return res.json({ success: true, user: null, guestUsage });
     }
-    return res.json({ success: true, user: req.user });
+    const freshUser = db.getUserById(req.user.id, req.deviceFingerprint);
+    return res.json({ success: true, user: freshUser || req.user });
   };
 
   app.get('/api/auth/session', handleGetSession);
   app.get('/api/auth/me', handleGetSession);
   app.get('/api/me', handleGetSession);
+
+  // Daily usage endpoint
+  app.get('/api/user/daily-usage', (req: AuthenticatedRequest, res: express.Response) => {
+    const usage = db.getUserDailyUsage(req.user?.id, {
+      deviceFingerprint: req.deviceFingerprint,
+      eitaaId: req.user?.eitaa_id
+    });
+    return res.json({ success: true, usage });
+  });
 
   // ==========================================
   // TYPOGRAPHY CONFIGURATION (PUBLIC / AUTH)
@@ -270,12 +417,33 @@ async function startServer() {
   // Generate Initial Prompt (Uses Master Prompt #1 or first active)
   const handlePromptGenerate = (req: AuthenticatedRequest, res: express.Response) => {
     try {
+      // Enforce Multi-Factor Daily Limit for Free Users on Primary Generation
+      if (req.user) {
+        const usage = db.getUserDailyUsage(req.user.id, {
+          deviceFingerprint: req.deviceFingerprint,
+          eitaaId: req.user.eitaa_id
+        });
+        if (!usage.canGeneratePrimary) {
+          const settings = db.getAppSettings();
+          const eitaaUrl = settings.eitaa_channel_url || 'https://eitaa.com/khatnegar';
+          return res.status(403).json({
+            success: false,
+            code: 'DAILY_LIMIT_REACHED',
+            error: 'سقف استفاده رایگان شما برای امروز (۱ بار در روز) تکمیل شده است. برای دسترسی نامحدود به مولد پرامپت، لطفاً اشتراک ویژه خط‌نگار را فعال فرمایید.',
+            eitaa_channel: eitaaUrl,
+            daily_primary_used: usage.dailyPrimaryUsed,
+            daily_primary_limit: usage.dailyLimit,
+            is_unlimited: false
+          });
+        }
+      }
+
       const config = req.body;
       const result = MasterPromptEngine.generate(config, {
         isGenerateAgain: false
       });
 
-      // Record telemetry
+      // Record telemetry with device fingerprint and eitaa id
       if (req.user) {
         db.recordGenerationLog({
           userId: req.user.id,
@@ -285,9 +453,17 @@ async function startServer() {
           aiModelId: config.aiModelId,
           styleId: config.calligraphyStyleId || config.styleId,
           formId: config.typographyFormId || config.formId,
-          isGenerateAgain: false
+          isGenerateAgain: false,
+          deviceFingerprint: req.deviceFingerprint,
+          eitaaId: req.user.eitaa_id,
+          ipAddress: req.clientIp || '127.0.0.1'
         });
       }
+
+      const updatedUsage = req.user ? db.getUserDailyUsage(req.user.id, {
+        deviceFingerprint: req.deviceFingerprint,
+        eitaaId: req.user.eitaa_id
+      }) : null;
 
       return res.json({
         success: true,
@@ -297,6 +473,9 @@ async function startServer() {
         masterPromptName: result.masterPrompt.name_fa,
         masterPromptIndex: result.masterPromptIndex,
         totalActiveMasterPrompts: result.totalActive,
+        daily_primary_used: updatedUsage ? updatedUsage.dailyPrimaryUsed : 1,
+        daily_primary_remaining: updatedUsage ? updatedUsage.remaining : 0,
+        is_unlimited: updatedUsage ? updatedUsage.isUnlimited : false,
         message: 'پرامپت با موفقیت تولید شد.'
       });
     } catch (err: any) {
@@ -327,7 +506,7 @@ async function startServer() {
           isGenerateAgain: true
         });
 
-        // Record telemetry
+        // Record telemetry with device fingerprint and eitaa id
         db.recordGenerationLog({
           userId: req.user!.id,
           username: req.user!.username,
@@ -336,7 +515,10 @@ async function startServer() {
           aiModelId: config.aiModelId,
           styleId: config.calligraphyStyleId,
           formId: config.typographyFormId,
-          isGenerateAgain: true
+          isGenerateAgain: true,
+          deviceFingerprint: req.deviceFingerprint,
+          eitaaId: req.user!.eitaa_id,
+          ipAddress: req.clientIp || '127.0.0.1'
         });
 
         return res.json({
@@ -502,6 +684,52 @@ async function startServer() {
       return res.status(500).json({ success: false, error: 'خطا در دریافت تاریخچه کاربر.' });
     }
   });
+
+  // Admin Manual Subscription Activation / Management
+  const handleSetUserSubscription = (req: AuthenticatedRequest, res: express.Response) => {
+    try {
+      const { id } = req.params;
+      const { plan_name, is_unlimited, status, duration_days, notes, plan_type, admin_notes } = req.body;
+      const targetUser = db.getUserById(id);
+      if (!targetUser) {
+        return res.status(404).json({ success: false, error: 'کاربر یافت نشد.' });
+      }
+
+      const isUnlimitedFlag = plan_type !== undefined
+        ? plan_type === 'unlimited'
+        : (is_unlimited !== undefined ? !!is_unlimited : status !== 'free');
+      const finalStatus = isUnlimitedFlag ? 'active' : 'free';
+
+      const updatedUser = db.setUserSubscription(id, {
+        plan_name: plan_name || (isUnlimitedFlag ? 'اشتراک نامحدود خط‌نگار' : 'طرح رایگان'),
+        is_unlimited: isUnlimitedFlag,
+        status: finalStatus,
+        duration_days: duration_days !== undefined ? (duration_days ? Number(duration_days) : null) : null,
+        activated_by: req.user!.username,
+        notes: notes || admin_notes
+      });
+
+      const isSub = updatedUser.is_unlimited;
+      db.recordAuditLog({
+        adminId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: isSub ? 'فعال‌سازی اشتراک نامحدود' : 'تغییر وضعیت اشتراک',
+        details: `اشتراک کاربر «${updatedUser.username}» به وضعیت «${isSub ? 'نامحدود (فعال)' : 'رایگان'}» تغییر یافت.`,
+        ip: req.clientIp || '127.0.0.1'
+      });
+
+      return res.json({
+        success: true,
+        user: updatedUser,
+        message: isSub ? `اشتراک نامحدود کاربر «${updatedUser.username}» با موفقیت فعال گردید.` : `وضعیت کاربر «${updatedUser.username}» به رایگان تغییر یافت.`
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message || 'خطا در اعمال وضعیت اشتراک کاربر.' });
+    }
+  };
+
+  app.post('/api/admin/users/:id/subscription', requireAdmin, handleSetUserSubscription);
+  app.patch('/api/admin/users/:id/subscription', requireAdmin, handleSetUserSubscription);
 
   // Login Logs
   app.get('/api/admin/login-logs', requireAdmin, (req: AuthenticatedRequest, res) => {

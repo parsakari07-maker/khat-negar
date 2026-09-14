@@ -13,6 +13,12 @@ interface AuthContextType {
     error?: string;
     commitUser?: () => void;
   }>;
+  register: (username: string, password: string, delayCommit?: boolean) => Promise<{
+    success: boolean;
+    user?: User;
+    error?: string;
+    commitUser?: () => void;
+  }>;
   setUserDirectly: (u: User | null) => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -95,6 +101,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const register = async (username: string, password: string, delayCommit = false) => {
+    try {
+      const { ok, data } = await apiFetch<{ token: string; user: User }>('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      });
+
+      if (ok && data.success && data.user) {
+        if (data.token) {
+          setAuthToken(data.token);
+        }
+        const registeredUser = data.user;
+        const commit = () => {
+          setUser(registeredUser);
+        };
+
+        if (!delayCommit) {
+          commit();
+        }
+        return { success: true, user: registeredUser, commitUser: commit };
+      }
+      return { success: false, error: data.error || 'خطا در فرآیند ثبت‌نام حساب کاربری.' };
+    } catch (err: any) {
+      return { success: false, error: 'خطای ارتباط با سرور. لطفاً اتصال اینترنت خود را بررسی نمایید.' };
+    }
+  };
+
   const logout = async () => {
     try {
       await apiFetch('/api/auth/logout', { method: 'POST' });
@@ -114,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         theme,
         toggleTheme,
         login,
+        register,
         setUserDirectly: setUser,
         logout,
         refreshUser

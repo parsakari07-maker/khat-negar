@@ -1,3 +1,5 @@
+import { getOrCreateDeviceFingerprint } from './fingerprint.js';
+
 // Centralized API utility for authenticated requests with Bearer token & cookie credentials
 
 export interface ApiResponse<T = any> {
@@ -45,6 +47,11 @@ export async function apiFetch<T = any>(
   // Attach Bearer Token if available
   if (token && !headers['Authorization']) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Attach Stable Device Fingerprint Header
+  if (!headers['X-Device-Fingerprint']) {
+    headers['X-Device-Fingerprint'] = getOrCreateDeviceFingerprint();
   }
 
   const mergedOptions: RequestInit = {

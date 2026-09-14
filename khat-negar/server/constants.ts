@@ -1262,6 +1262,20 @@ export const DEFAULT_APP_SETTINGS = {
   footer_title_fa: 'سامانه تخصصی مهندسی پرامپت تایپوگرافی فارسی',
   footer_subtitle_fa: 'تولید هوشمند دستورات خوشنویسی اصیل سنتی و مدرن با حفظ ۱۰۰٪ دقت کاراکترها',
 
+  // Subscription, Daily Limit & Eitaa Integration
+  eitaa_channel_url: 'https://eitaa.com/khatnegarTypographicCraft',
+  eitaa_channel_name_fa: 'کانال رسمی خط‌نگار در ایتا',
+  subscription_plans_title_fa: 'طرح‌های اشتراک نامحدود خط‌نگار',
+  daily_limit_message_fa: 'سقف تولید روزانه حساب‌های رایگان ۱ پرامپت اصلی در هر روز است.',
+  daily_limit_badge_unlimited_fa: 'وضعیت حساب: اشتراک نامحدود فعال ✨',
+  daily_limit_badge_free_fa: 'سهمیه رایگان امروز: {remaining} از {limit} پرامپت اصلی باقی‌مانده',
+  daily_limit_free_subtext_fa: 'امکان «تولید دوباره» پرامپت‌های قبلی کاملاً نامحدود و رایگان است ✨',
+  daily_limit_exceeded_title_fa: 'سقف ۱ پرامپت رایگان امروز شما استفاده شده است',
+  daily_limit_exceeded_desc_fa: '💡 نکته مهم: امکان «تولید دوباره» برای پرامپت‌های قبلی شما همچنان کاملاً نامحدود و رایگان است!',
+  daily_limit_upgrade_prompt_fa: 'برای ارتقا به اشتراک نامحدود و حذف سقف روزانه، به کانال ایتا مراجعه فرمایید:',
+  daily_limit_eitaa_btn_text_fa: 'کانال ایتا خط‌نگار',
+  daily_free_limit: 1,
+
   // Defaults
   default_style_id: 'style-thuluth',
   default_form_id: 'form-free',

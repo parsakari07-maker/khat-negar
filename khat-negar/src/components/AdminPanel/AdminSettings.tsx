@@ -17,7 +17,10 @@ import {
   Type,
   Eye,
   Lock,
-  FileText
+  FileText,
+  Crown,
+  Zap,
+  ExternalLink
 } from 'lucide-react';
 import { apiFetch } from '../../utils/api.js';
 import type { AppSettings } from '../../types.js';
@@ -29,7 +32,7 @@ export function AdminSettings() {
   const { settings: globalSettings, updateSettings, setCustomLogo, resetLogo, logoUrl, isCustom } = useSettings();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'brand' | 'auth' | 'generator' | 'security'>('brand');
+  const [activeTab, setActiveTab] = useState<'brand' | 'auth' | 'generator' | 'subscriptions' | 'security'>('brand');
   const [formData, setFormData] = useState<AppSettings>(DEFAULT_CLIENT_SETTINGS);
 
   const [loading, setLoading] = useState(true);
@@ -117,7 +120,7 @@ export function AdminSettings() {
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const handleResetSectionDefaults = (section: 'brand' | 'auth' | 'generator' | 'security') => {
+  const handleResetSectionDefaults = (section: 'brand' | 'auth' | 'generator' | 'subscriptions' | 'security') => {
     if (!confirm('آیا مایلید فیلدهای این بخش به مقادیر پیش‌فرض اولیه بازگردانی شوند؟')) return;
 
     if (section === 'brand') {
@@ -162,6 +165,19 @@ export function AdminSettings() {
         generator_result_subtitle_fa: DEFAULT_CLIENT_SETTINGS.generator_result_subtitle_fa,
         footer_title_fa: DEFAULT_CLIENT_SETTINGS.footer_title_fa,
         footer_subtitle_fa: DEFAULT_CLIENT_SETTINGS.footer_subtitle_fa
+      }));
+    } else if (section === 'subscriptions') {
+      setFormData(prev => ({
+        ...prev,
+        daily_free_limit: DEFAULT_CLIENT_SETTINGS.daily_free_limit,
+        eitaa_channel_url: DEFAULT_CLIENT_SETTINGS.eitaa_channel_url,
+        daily_limit_badge_unlimited_fa: DEFAULT_CLIENT_SETTINGS.daily_limit_badge_unlimited_fa,
+        daily_limit_badge_free_fa: DEFAULT_CLIENT_SETTINGS.daily_limit_badge_free_fa,
+        daily_limit_free_subtext_fa: DEFAULT_CLIENT_SETTINGS.daily_limit_free_subtext_fa,
+        daily_limit_exceeded_title_fa: DEFAULT_CLIENT_SETTINGS.daily_limit_exceeded_title_fa,
+        daily_limit_exceeded_desc_fa: DEFAULT_CLIENT_SETTINGS.daily_limit_exceeded_desc_fa,
+        daily_limit_upgrade_prompt_fa: DEFAULT_CLIENT_SETTINGS.daily_limit_upgrade_prompt_fa,
+        daily_limit_eitaa_btn_text_fa: DEFAULT_CLIENT_SETTINGS.daily_limit_eitaa_btn_text_fa
       }));
     } else if (section === 'security') {
       setFormData(prev => ({
@@ -264,6 +280,19 @@ export function AdminSettings() {
         >
           <Sparkles className="w-4 h-4" />
           <span>مولد پرامپت و فوتر</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('subscriptions')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeTab === 'subscriptions'
+              ? 'bg-[#F55951] text-white shadow-xs'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
+          }`}
+        >
+          <Crown className="w-4 h-4" />
+          <span>اشتراک، سهمیه روزانه و ایتا</span>
         </button>
 
         <button
@@ -955,6 +984,186 @@ export function AdminSettings() {
                     onChange={e => setFormData({ ...formData, footer_subtitle_fa: e.target.value })}
                     placeholder="تولید هوشمند دستورات خوشنویسی اصیل سنتی و مدرن..."
                     className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB: SUBSCRIPTIONS, DAILY LIMITS & EITAA ================= */}
+        {activeTab === 'subscriptions' && (
+          <div className="space-y-6">
+            {/* Card 1: Core Quota & Eitaa Link */}
+            <div className="p-6 rounded-3xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
+                <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-amber-500" />
+                  <span>تنظیمات سقف روزانه پرامپت‌های رایگان و پیوند به ایتا</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => handleResetSectionDefaults('subscriptions')}
+                  className="text-[11px] text-[var(--text-muted)] hover:text-[#F55951] flex items-center gap-1 transition cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>بازنشانی پیش‌فرض‌ها</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    سقف مجاز پرامپت‌های اصلی رایگان در هر روز:
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={formData.daily_free_limit || 1}
+                    onChange={e => setFormData({ ...formData, daily_free_limit: Math.max(1, parseInt(e.target.value) || 1) })}
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
+                    پیش‌فرض: ۱ پرامپت در روز (تولید دوباره پرامپت‌ها همواره نامحدود و بدون سقف است).
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    لینک کامل کانال ایتا جهت ارتقای حساب:
+                  </label>
+                  <input
+                    type="url"
+                    dir="ltr"
+                    value={formData.eitaa_channel_url || ''}
+                    onChange={e => setFormData({ ...formData, eitaa_channel_url: e.target.value })}
+                    placeholder="https://eitaa.com/khatnegarTypographicCraft"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-mono text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden text-left"
+                  />
+                  <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
+                    کاربر با کلیک روی دکمه ارتقا یا بنر اتمام سهمیه مستقیماً به این آدرس هدایت می‌شود.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    متن عنوان دکمه هدایت به کانال ایتا:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.daily_limit_eitaa_btn_text_fa || ''}
+                    onChange={e => setFormData({ ...formData, daily_limit_eitaa_btn_text_fa: e.target.value })}
+                    placeholder="کانال ایتا خط‌نگار"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    متن دعوت به ارتقای اشتراک در کانال:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.daily_limit_upgrade_prompt_fa || ''}
+                    onChange={e => setFormData({ ...formData, daily_limit_upgrade_prompt_fa: e.target.value })}
+                    placeholder="برای ارتقا به اشتراک نامحدود و حذف سقف روزانه، به کانال ایتا مراجعه فرمایید:"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Status Badges on Generator */}
+            <div className="p-6 rounded-3xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
+                <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-emerald-500" />
+                  <span>متون نشانک‌های وضعیت اشتراک و سهمیه در بالای صفحه مولد</span>
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    متن نشانک اکانت‌های دارای اشتراک نامحدود فعال:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.daily_limit_badge_unlimited_fa || ''}
+                    onChange={e => setFormData({ ...formData, daily_limit_badge_unlimited_fa: e.target.value })}
+                    placeholder="وضعیت حساب: اشتراک نامحدود فعال ✨"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
+                    این نشانک با رنگ سبز زمردی برای کاربران با اشتراک ویژه نمایش داده می‌شود.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    متن نشانک سهمیه روزانه کاربر عادی:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.daily_limit_badge_free_fa || ''}
+                    onChange={e => setFormData({ ...formData, daily_limit_badge_free_fa: e.target.value })}
+                    placeholder="سهمیه روزانه: {remaining} از {limit} پرامپت رایگان امروز باقیمانده"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
+                    می‌توانید از {'{remaining}'} برای باقیمانده و {'{limit}'} برای سقف کل استفاده کنید.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    متن راهنمای زیر نشانک سهمیه رایگان:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.daily_limit_free_subtext_fa || ''}
+                    onChange={e => setFormData({ ...formData, daily_limit_free_subtext_fa: e.target.value })}
+                    placeholder="امکان «تولید دوباره» پرامپت‌های قبلی کاملاً نامحدود و رایگان است ✨"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Limit Exceeded Notice */}
+            <div className="p-6 rounded-3xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
+                <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-500" />
+                  <span>متون کادر اعلان اتمام سهمیه روزانه و بازتولید رایگان</span>
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    عنوان کادر اتمام سقف روزانه:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.daily_limit_exceeded_title_fa || ''}
+                    onChange={e => setFormData({ ...formData, daily_limit_exceeded_title_fa: e.target.value })}
+                    placeholder="سقف ۱ پرامپت رایگان امروز شما استفاده شده است"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                    متن توضیحی اتمام سقف روزانه و اطمینان‌بخشی بازتولید:
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formData.daily_limit_exceeded_desc_fa || ''}
+                    onChange={e => setFormData({ ...formData, daily_limit_exceeded_desc_fa: e.target.value })}
+                    placeholder="💡 نکته مهم: امکان «تولید دوباره» برای پرامپت‌های قبلی شما همچنان کاملاً نامحدود و رایگان است!"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden resize-none"
                   />
                 </div>
               </div>

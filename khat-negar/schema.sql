@@ -191,3 +191,29 @@ CREATE INDEX IF NOT EXISTS idx_feedback_reports_status ON feedback_reports(statu
 CREATE INDEX IF NOT EXISTS idx_master_prompts_active ON master_prompts(active, sort_order);
 CREATE INDEX IF NOT EXISTS idx_typography_styles_active ON typography_styles(active, sort_order);
 CREATE INDEX IF NOT EXISTS idx_generation_logs_user ON generation_logs(user_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_generation_logs_daily ON generation_logs(user_id, is_generate_again, timestamp);
+
+-- ========================================================
+-- 9. USER SUBSCRIPTION SYSTEM & LIMITS (Safe Migration)
+-- ========================================================
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(30) NOT NULL DEFAULT 'free';
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS subscription_activated_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS subscription_activated_by VARCHAR(100) DEFAULT NULL;
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS is_unlimited BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plan_name VARCHAR(100) NOT NULL DEFAULT 'unlimited',
+    status VARCHAR(30) NOT NULL DEFAULT 'active',
+    activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ DEFAULT NULL,
+    activated_by VARCHAR(100) NOT NULL DEFAULT 'admin',
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_subscriptions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_users_subscription ON users(subscription_status, is_unlimited);
+

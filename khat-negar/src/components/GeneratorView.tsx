@@ -19,7 +19,11 @@ import {
   Compass,
   CheckCircle2,
   Flame,
-  Palette
+  Palette,
+  Crown,
+  AlertTriangle,
+  Zap,
+  ExternalLink
 } from 'lucide-react';
 import { ColorControl } from './ColorControl.js';
 import { GenerationAnimation } from './GenerationAnimation.js';
@@ -27,6 +31,7 @@ import { PromptResultCard } from './PromptResultCard.js';
 import { AspectRatioIcon } from './AspectRatioIcon.js';
 import { apiFetch } from '../utils/api.js';
 import { useSettings } from '../context/SettingsContext.js';
+import { useAuth } from '../context/AuthContext.js';
 import {
   INITIAL_TYPOGRAPHY_STYLES,
   INITIAL_TYPOGRAPHY_FORMS,
@@ -65,6 +70,22 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
   const generatorSampleBtn = settings.generator_sample_btn_fa || 'بارگذاری نمونه آزمایشی (ایران من)';
   const generatorSubmitBtn = settings.generator_submit_btn_fa || 'تولید پرامپت تخصصی تایپوگرافی';
   const generatorSubmitLoading = settings.generator_submit_loading_fa || 'در حال پردازش و نگارش پرامپت...';
+
+  // Subscription, Daily Limit & Eitaa Integration Dynamic Texts
+  const badgeUnlimitedText = settings.daily_limit_badge_unlimited_fa || 'وضعیت حساب: اشتراک نامحدود فعال ✨';
+  const badgeFreeTemplate = settings.daily_limit_badge_free_fa || 'سهمیه رایگان امروز: {remaining} از {limit} پرامپت اصلی باقی‌مانده';
+  const freeSubtext = settings.daily_limit_free_subtext_fa || 'امکان «تولید دوباره» پرامپت‌های قبلی کاملاً نامحدود و رایگان است ✨';
+  const limitExceededTitle = settings.daily_limit_exceeded_title_fa || 'سقف ۱ پرامپت رایگان امروز شما استفاده شده است';
+  const limitExceededDesc = settings.daily_limit_exceeded_desc_fa || '💡 نکته مهم: امکان «تولید دوباره» برای پرامپت‌های قبلی شما همچنان کاملاً نامحدود و رایگان است!';
+  const upgradePromptText = settings.daily_limit_upgrade_prompt_fa || 'برای ارتقا به اشتراک نامحدود و حذف سقف روزانه، به کانال ایتا مراجعه فرمایید:';
+  const eitaaBtnText = settings.daily_limit_eitaa_btn_text_fa || 'کانال ایتا خط‌نگار';
+  const eitaaUrl = settings.eitaa_channel_url || 'https://eitaa.com/khatnegarTypographicCraft';
+
+  const formatFreeBadge = (remaining: number, limit: number) => {
+    return badgeFreeTemplate
+      .replace('{remaining}', remaining.toString())
+      .replace('{limit}', limit.toString());
+  };
 
   // Options loaded from server with robust initial defaults
   const [styles, setStyles] = useState<TypographyStyle[]>(INITIAL_TYPOGRAPHY_STYLES);
@@ -173,6 +194,9 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
     loadOptions();
   }, []);
 
+  const { user, refreshUser } = useAuth();
+  const isQuotaDepleted = !!user && !user.is_unlimited && user.daily_primary_remaining === 0;
+
   const handleGenerate = async () => {
     if (!isLoggedIn) {
       onOpenLogin();
@@ -181,6 +205,12 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
 
     if (!config.title.trim()) {
       setErrorMessage('لطفاً متن یا عبارت خوشنویسی خود را وارد نمایید.');
+      return;
+    }
+
+    // Client-side quick check for daily limit
+    if (user && !user.is_unlimited && user.daily_primary_remaining === 0) {
+      setErrorMessage(limitExceededTitle);
       return;
     }
 
@@ -199,10 +229,15 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
         setErrorMessage(data.error || 'خطا در تولید پرامپت.');
         setShowAnimation(false);
         setIsGenerating(false);
+        if ((data as any)?.code === 'DAILY_LIMIT_REACHED') {
+          await refreshUser();
+        }
         return;
       }
 
       setGenerationResult(data);
+      // Synchronize latest credit and usage count
+      await refreshUser();
     } catch (err: any) {
       setErrorMessage('خطای ارتباط با سرور.');
       setShowAnimation(false);
@@ -768,33 +803,121 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center gap-2"
+            className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center gap-2"
           >
             <Info className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </motion.div>
         )}
 
+        {/* =========================================
+            USER QUOTA & SUBSCRIPTION STATUS (ORIGINAL LOCATION - COMPACT & ELEGANT)
+        ========================================== */}
+        {user && (
+          <div className="w-full">
+            {user.is_unlimited ? (
+              <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300">
+                <div className="flex items-center gap-2 font-bold">
+                  <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>{badgeUnlimitedText}</span>
+                </div>
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 font-medium">
+                  بدون سقف روزانه ✨
+                </span>
+              </div>
+            ) : user.daily_primary_remaining === 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-[var(--text-secondary)] space-y-2"
+              >
+                <div className="flex items-center justify-between font-bold text-amber-800 dark:text-amber-300">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>{limitExceededTitle}</span>
+                  </div>
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 font-mono">
+                    {`۰ از ${user.daily_primary_limit || 1}`}
+                  </span>
+                </div>
+                <div className="text-[11px] leading-relaxed text-[var(--text-muted)] flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-amber-500/15">
+                  <span>{limitExceededDesc}</span>
+                  <a
+                    href={eitaaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                  >
+                    <span>{eitaaBtnText}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </motion.div>
+            ) : (
+              <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs text-[var(--text-secondary)]">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-3.5 h-3.5 text-[#F55951] shrink-0" />
+                  <span className="font-medium">
+                    {formatFreeBadge(user.daily_primary_remaining, user.daily_primary_limit || 1)}
+                  </span>
+                </div>
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  {freeSubtext}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* PRIMARY GENERATE BUTTON */}
-        <div>
+        <div className="space-y-3 pt-2">
           <motion.button
-            whileHover={{ scale: 1.015, boxShadow: '0 20px 25px -5px rgba(245, 89, 81, 0.3)' }}
-            whileTap={{ scale: 0.985 }}
+            whileHover={{ scale: isQuotaDepleted ? 1 : 1.015, boxShadow: isQuotaDepleted ? 'none' : '0 20px 25px -5px rgba(245, 89, 81, 0.3)' }}
+            whileTap={{ scale: isQuotaDepleted ? 1 : 0.985 }}
             type="button"
-            disabled={isGenerating || isGeneratingAgain}
+            disabled={isGenerating || isGeneratingAgain || isQuotaDepleted}
             onClick={handleGenerate}
-            className={`w-full relative group overflow-hidden py-4 px-6 rounded-2xl bg-gradient-to-r from-[#F55951] via-[#FA7268] to-[#E04840] text-white font-black text-base md:text-lg shadow-lg shadow-[#F55951]/25 transition-all cursor-pointer flex items-center justify-center gap-3 ${
-              isGenerating || isGeneratingAgain ? 'opacity-80 cursor-not-allowed' : ''
+            className={`w-full relative group overflow-hidden py-4 px-6 rounded-2xl font-black text-base md:text-lg transition-all flex items-center justify-center gap-3 ${
+              isQuotaDepleted
+                ? 'bg-amber-500/15 text-amber-800 dark:text-amber-200 border-2 border-amber-500/30 cursor-not-allowed shadow-xs'
+                : isGenerating || isGeneratingAgain
+                ? 'bg-gradient-to-r from-[#F55951] via-[#FA7268] to-[#E04840] text-white opacity-80 cursor-not-allowed shadow-lg'
+                : 'bg-gradient-to-r from-[#F55951] via-[#FA7268] to-[#E04840] text-white shadow-lg shadow-[#F55951]/25 hover:shadow-xl cursor-pointer'
             }`}
           >
             {/* Subtle animated shimmer line on button */}
-            <span className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+            {!isQuotaDepleted && (
+              <span className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+            )}
 
-            <Sparkles className={`w-5 h-5 text-white transition-transform ${isGenerating ? 'animate-spin' : 'group-hover:rotate-12'}`} />
-            <span className="tracking-tight">
-              {isGenerating ? generatorSubmitLoading : generatorSubmitBtn}
+            {isQuotaDepleted ? (
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+            ) : (
+              <Sparkles className={`w-5 h-5 text-white transition-transform ${isGenerating ? 'animate-spin' : 'group-hover:rotate-12'}`} />
+            )}
+            <span className="tracking-tight text-center">
+              {isQuotaDepleted
+                ? `${limitExceededTitle} (تولید دوباره مجاز است)`
+                : isGenerating
+                ? generatorSubmitLoading
+                : generatorSubmitBtn}
             </span>
           </motion.button>
+
+          {isQuotaDepleted && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs text-[var(--text-secondary)]">
+              <span>{upgradePromptText}</span>
+              <a
+                href={eitaaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 underline transition cursor-pointer"
+              >
+                <span>{eitaaBtnText}</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          )}
         </div>
       </motion.div>
 

@@ -15,7 +15,9 @@ import {
   AlertTriangle,
   History,
   X,
-  AlertCircle
+  AlertCircle,
+  Crown,
+  Zap
 } from 'lucide-react';
 import { apiFetch } from '../../utils/api.js';
 import type { User, LoginLog } from '../../types.js';
@@ -32,6 +34,7 @@ export function AdminUsers() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [deleteTargetUser, setDeleteTargetUser] = useState<User | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
 
@@ -42,6 +45,12 @@ export function AdminUsers() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<'user' | 'admin'>('user');
+  const [newIsUnlimited, setNewIsUnlimited] = useState(false);
+
+  // Subscription Form State
+  const [subPlanType, setSubPlanType] = useState<'unlimited' | 'free'>('unlimited');
+  const [subNotes, setSubNotes] = useState('');
+  const [subLoading, setSubLoading] = useState(false);
 
   // Edit Form State
   const [editUsername, setEditUsername] = useState('');
@@ -93,16 +102,87 @@ export function AdminUsers() {
         })
       });
       if (ok && data.success) {
+        if (newIsUnlimited && data.user?.id) {
+          await apiFetch(`/api/admin/users/${data.user.id}/subscription`, {
+            method: 'POST',
+            body: JSON.stringify({
+              plan_type: 'unlimited',
+              status: 'active',
+              admin_notes: 'فعال‌سازی همزمان با صدور اولیه حساب'
+            })
+          });
+        }
         setSuccessMessage(data.message || 'کاربر با موفقیت ایجاد شد.');
         setShowCreateModal(false);
         setNewUsername('');
         setNewPassword('');
+        setNewIsUnlimited(false);
         fetchUsers();
         setTimeout(() => setSuccessMessage(null), 4000);
       } else {
         setErrorMessage(data.error || 'خطا در ایجاد کاربر.');
       }
     } catch (err: any) {
+      setErrorMessage('خطای ارتباط با سرور.');
+    }
+  };
+
+  const handleOpenSubscription = (user: User) => {
+    setTargetUser(user);
+    setSubPlanType(user.is_unlimited ? 'unlimited' : 'unlimited');
+    setSubNotes(user.subscription_notes || user.subscription?.notes || '');
+    setShowSubscriptionModal(true);
+  };
+
+  const handleSaveSubscription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetUser) return;
+    setErrorMessage(null);
+    setSubLoading(true);
+    try {
+      const { ok, data } = await apiFetch(`/api/admin/users/${targetUser.id}/subscription`, {
+        method: 'POST',
+        body: JSON.stringify({
+          plan_type: subPlanType,
+          status: 'active',
+          admin_notes: subNotes
+        })
+      });
+      if (ok && data.success) {
+        setSuccessMessage(data.message || `وضعیت اشتراک کاربر «${targetUser.username}» با موفقیت به‌روزرسانی شد.`);
+        setShowSubscriptionModal(false);
+        fetchUsers();
+        setTimeout(() => setSuccessMessage(null), 4000);
+      } else {
+        setErrorMessage(data?.error || 'خطا در تغییر وضعیت اشتراک.');
+      }
+    } catch (err: any) {
+      setErrorMessage('خطای ارتباط با سرور.');
+    } finally {
+      setSubLoading(false);
+    }
+  };
+
+  const handleQuickToggleUnlimited = async (user: User) => {
+    setErrorMessage(null);
+    const newPlan = user.is_unlimited ? 'free' : 'unlimited';
+    try {
+      const { ok, data } = await apiFetch(`/api/admin/users/${user.id}/subscription`, {
+        method: 'POST',
+        body: JSON.stringify({
+          plan_type: newPlan,
+          status: 'active',
+          admin_notes: newPlan === 'unlimited' ? 'فعال‌سازی سریع نامحدود از پنل' : 'تغییر به رایگان از پنل'
+        })
+      });
+      if (ok && data.success) {
+        setSuccessMessage(`اشتراک کاربر «${user.username}» به حالت «${newPlan === 'unlimited' ? 'نامحدود' : 'رایگان'}» تغییر یافت.`);
+        fetchUsers();
+        setTimeout(() => setSuccessMessage(null), 4000);
+      } else {
+        setErrorMessage(data?.error || 'خطا در تغییر اشتراک.');
+      }
+    } catch (err) {
       setErrorMessage('خطای ارتباط با سرور.');
     }
   };
@@ -269,6 +349,8 @@ export function AdminUsers() {
             <tr>
               <th className="p-4">نام کاربری</th>
               <th className="p-4">نقش</th>
+              <th className="p-4">وضعیت اشتراک</th>
+              <th className="p-4">مصرف امروز</th>
               <th className="p-4">وضعیت حساب</th>
               <th className="p-4">تعداد IP ثبت‌شده</th>
               <th className="p-4">آخرین ورود</th>
@@ -279,13 +361,13 @@ export function AdminUsers() {
           <tbody className="divide-y divide-[var(--border-color)] text-[var(--text-primary)]">
             {loading ? (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-[var(--text-muted)]">
+                <td colSpan={9} className="p-8 text-center text-[var(--text-muted)]">
                   در حال بارگذاری اطلاعات کاربران...
                 </td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-[var(--text-muted)]">
+                <td colSpan={9} className="p-8 text-center text-[var(--text-muted)]">
                   کاربری با این مشخصات یافت نشد.
                 </td>
               </tr>
@@ -295,6 +377,11 @@ export function AdminUsers() {
                   <td className="p-4 font-bold text-sm">
                     <div className="flex items-center gap-2">
                       <span>{u.username}</span>
+                      {u.auth_provider === 'eitaa' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold border border-orange-500/20" title={`کاربر برنامک ایتا (شناسه: ${u.eitaa_id || 'نامشخص'})`}>
+                          برنامک ایتا
+                        </span>
+                      )}
                       {u.username === 'admin' && (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 font-bold">
                           مدیر اصلی
@@ -306,6 +393,37 @@ export function AdminUsers() {
                     <span className="text-xs font-semibold">
                       {u.role === 'admin' ? 'مدیر کل' : 'کاربر عادی'}
                     </span>
+                  </td>
+                  <td className="p-4">
+                    {u.is_unlimited ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSubscription(u)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-[11px] border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer"
+                        title="کلیک جهت مدیریت اشتراک"
+                      >
+                        <Crown className="w-3.5 h-3.5 text-amber-500" />
+                        <span>نامحدود</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSubscription(u)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-500/10 hover:bg-gray-500/20 text-[var(--text-muted)] text-[11px] font-medium transition cursor-pointer"
+                        title="کلیک جهت ارتقا به اشتراک نامحدود"
+                      >
+                        <span>رایگان (۱/روز)</span>
+                      </button>
+                    )}
+                  </td>
+                  <td className="p-4">
+                    <div className="text-[11px] font-mono whitespace-nowrap">
+                      <span className="font-bold text-[var(--text-primary)]">{u.today_primary_count || 0}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] mr-1">اصلی</span>
+                      <span className="text-[var(--text-muted)] mx-1">/</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{u.today_generate_again_count || 0}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] mr-1">بازتولید</span>
+                    </div>
                   </td>
                   <td className="p-4">
                     {u.is_active ? (
@@ -350,6 +468,18 @@ export function AdminUsers() {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSubscription(u)}
+                        className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                          u.is_unlimited
+                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 hover:bg-amber-500/25'
+                            : 'bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-amber-500 text-amber-500'
+                        }`}
+                        title="مدیریت اشتراک نامحدود"
+                      >
+                        <Crown className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleOpenHistory(u)}
@@ -446,6 +576,24 @@ export function AdminUsers() {
                   <option value="user">کاربر عادی (تولید پرامپت)</option>
                   <option value="admin">مدیر کل (دسترسی به پنل مدیریت)</option>
                 </select>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newIsUnlimited}
+                    onChange={e => setNewIsUnlimited(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#F55951] focus:ring-[#F55951]"
+                  />
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                    <Crown className="w-3.5 h-3.5 text-amber-500" />
+                    <span>اعطای اشتراک نامحدود بدون سقف روزانه</span>
+                  </span>
+                </label>
+                <span className="text-[10px] text-[var(--text-muted)] block mt-1 mr-6">
+                  در صورت فعال‌سازی، این کاربر محدودیت ۱ پرامپت در روز را نخواهد داشت.
+                </span>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
@@ -698,6 +846,139 @@ export function AdminUsers() {
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================
+          MODAL 5: USER SUBSCRIPTION MANAGEMENT
+      ========================================== */}
+      {showSubscriptionModal && targetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setShowSubscriptionModal(false)}
+              className="absolute top-5 left-5 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                <Crown className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  مدیریت اشتراک: «{targetUser.username}»
+                </h3>
+                <span className="text-xs text-[var(--text-muted)]">
+                  فعال‌سازی یا لغو اشتراک نامحدود سایت
+                </span>
+              </div>
+            </div>
+
+            {/* Current status info */}
+            <div className="mb-4 p-3.5 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--text-muted)]">وضعیت کنونی:</span>
+                <span className="font-bold">
+                  {targetUser.is_unlimited ? (
+                    <span className="text-amber-600 dark:text-amber-400 font-bold inline-flex items-center gap-1">
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>اشتراک نامحدود فعال</span>
+                    </span>
+                  ) : (
+                    <span className="text-[var(--text-muted)]">حساب رایگان (۱ پرامپت اصلی در روز)</span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-[var(--border-color)]">
+                <span className="text-[var(--text-muted)]">مصرف امروز:</span>
+                <span className="font-mono font-bold">
+                  {targetUser.today_primary_count || 0} پرامپت اصلی / {targetUser.today_generate_again_count || 0} بازتولید
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveSubscription} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                  انتخاب طرح اشتراک:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSubPlanType('unlimited')}
+                    className={`p-3 rounded-2xl border text-right transition cursor-pointer flex flex-col gap-1 ${
+                      subPlanType === 'unlimited'
+                        ? 'bg-amber-500/15 border-amber-500 text-amber-800 dark:text-amber-200 shadow-xs'
+                        : 'bg-[var(--bg-card)] border-[var(--border-color)] hover:border-amber-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-xs">
+                      <span>طرح نامحدود</span>
+                      <Crown className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <span className="text-[10px] text-[var(--text-muted)] leading-tight">
+                      بدون سقف تولید پرامپت
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSubPlanType('free')}
+                    className={`p-3 rounded-2xl border text-right transition cursor-pointer flex flex-col gap-1 ${
+                      subPlanType === 'free'
+                        ? 'bg-[#F55951]/10 border-[#F55951] text-[var(--text-primary)] shadow-xs'
+                        : 'bg-[var(--bg-card)] border-[var(--border-color)] hover:border-[#F55951]/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-xs">
+                      <span>طرح رایگان</span>
+                      <Zap className="w-4 h-4 text-[#F55951]" />
+                    </div>
+                    <span className="text-[10px] text-[var(--text-muted)] leading-tight">
+                      ۱ اصلی/روز + بازتولید آزاد
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                  یادداشت مدیر (شماره تراکنش / کانال ایتا):
+                </label>
+                <input
+                  type="text"
+                  value={subNotes}
+                  onChange={e => setSubNotes(e.target.value)}
+                  placeholder="مثال: رسید ایتا - فعال‌سازی دستی"
+                  className="w-full px-3 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] focus:border-amber-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSubscriptionModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs font-bold text-[var(--text-secondary)] cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={subLoading}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold shadow-md shadow-amber-500/20 transition cursor-pointer flex items-center gap-1.5"
+                >
+                  {subLoading ? (
+                    <span className="animate-spin text-xs">⏳</span>
+                  ) : (
+                    <Crown className="w-3.5 h-3.5" />
+                  )}
+                  <span>ثبت و ذخیره وضعیت اشتراک</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

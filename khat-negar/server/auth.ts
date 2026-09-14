@@ -8,6 +8,7 @@ export interface AuthenticatedRequest extends Request {
   clientIp?: string;
   clientUserAgent?: string;
   deviceInfo?: string;
+  deviceFingerprint?: string;
 }
 
 // Memory-based sliding window rate limiter
@@ -88,6 +89,26 @@ export function attachClientInfo(req: AuthenticatedRequest, res: Response, next:
   const ua = req.headers['user-agent'] || '';
   req.clientUserAgent = ua;
   req.deviceInfo = parseUserAgent(ua);
+
+  // Extract stable multi-factor device fingerprint from headers or cookies
+  const headerFp = req.headers['x-device-fingerprint'];
+  let fp = typeof headerFp === 'string' ? headerFp.trim() : (Array.isArray(headerFp) ? headerFp[0].trim() : '');
+
+  if (!fp && req.cookies?.device_fp) {
+    fp = String(req.cookies.device_fp).trim();
+  } else if (!fp && req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)device_fp=([^;]+)/);
+    if (match) {
+      fp = decodeURIComponent(match[1].trim());
+    }
+  }
+
+  // If client didn't supply one, fallback to deterministic IP + User-Agent hash
+  if (!fp) {
+    fp = `ip_ua_${req.clientIp}_${ua.slice(0, 40)}`;
+  }
+
+  req.deviceFingerprint = fp;
   next();
 }
 

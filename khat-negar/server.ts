@@ -697,11 +697,11 @@ async function startServer() {
 
       const isUnlimitedFlag = plan_type !== undefined
         ? plan_type === 'unlimited'
-        : (is_unlimited !== undefined ? !!is_unlimited : status !== 'free');
-      const finalStatus = isUnlimitedFlag ? 'active' : 'free';
+        : (is_unlimited !== undefined ? !!is_unlimited : status === 'active');
+      const finalStatus: 'active' | 'free' = isUnlimitedFlag ? 'active' : 'free';
 
       const updatedUser = db.setUserSubscription(id, {
-        plan_name: plan_name || (isUnlimitedFlag ? 'اشتراک نامحدود خط‌نگار' : 'طرح رایگان'),
+        plan_name: plan_name || (isUnlimitedFlag ? 'نامحدود' : ''),
         is_unlimited: isUnlimitedFlag,
         status: finalStatus,
         duration_days: duration_days !== undefined ? (duration_days ? Number(duration_days) : null) : null,
@@ -713,15 +713,15 @@ async function startServer() {
       db.recordAuditLog({
         adminId: req.user!.id,
         adminUsername: req.user!.username,
-        action: isSub ? 'فعال‌سازی اشتراک نامحدود' : 'تغییر وضعیت اشتراک',
-        details: `اشتراک کاربر «${updatedUser.username}» به وضعیت «${isSub ? 'نامحدود (فعال)' : 'رایگان'}» تغییر یافت.`,
+        action: isSub ? 'فعال‌سازی اشتراک نامحدود' : 'لغو اشتراک نامحدود',
+        details: `اشتراک کاربر «${updatedUser.username}» به وضعیت «${isSub ? 'نامحدود (فعال)' : 'عادی'}» تغییر یافت.`,
         ip: req.clientIp || '127.0.0.1'
       });
 
       return res.json({
         success: true,
         user: updatedUser,
-        message: isSub ? `اشتراک نامحدود کاربر «${updatedUser.username}» با موفقیت فعال گردید.` : `وضعیت کاربر «${updatedUser.username}» به رایگان تغییر یافت.`
+        message: isSub ? `اشتراک نامحدود کاربر «${updatedUser.username}» با موفقیت فعال گردید.` : `اشتراک کاربر «${updatedUser.username}» به حالت عادی تغییر یافت.`
       });
     } catch (err: any) {
       return res.status(400).json({ success: false, error: err.message || 'خطا در اعمال وضعیت اشتراک کاربر.' });

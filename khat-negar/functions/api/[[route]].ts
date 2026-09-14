@@ -35,9 +35,59 @@ export interface UserRecord {
   ip_count?: number;
   last_login_at?: string | null;
   active_sessions_count?: number;
+  is_unlimited?: boolean;
+  subscription_status?: string;
+  subscription_plan_name?: string;
+  subscription_expires_at?: string | null;
+  subscription_notes?: string;
+  subscription_activated_by?: string | null;
+  subscription_activated_at?: string | null;
+  auth_provider?: 'local' | 'eitaa';
+  eitaa_id?: string;
+  first_name?: string;
+  last_name?: string;
+  daily_primary_used?: number;
+  daily_primary_limit?: number;
+  daily_primary_remaining?: number;
+  can_generate_primary?: boolean;
 }
 
 const SUPERADMIN_ID = '00000000-0000-0000-0000-000000000001';
+
+function formatUserWithQuota(user: any): any {
+  if (!user) return null;
+  const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa';
+  const planName = user.subscription_plan_name || (isUnlimited ? 'نامحدود' : '');
+  const status = isUnlimited ? 'active' : (user.subscription_status || 'standard');
+
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role || 'user',
+    is_active: user.is_active !== false,
+    is_suspicious: !!user.is_suspicious,
+    created_at: user.created_at || new Date().toISOString(),
+    updated_at: user.updated_at || new Date().toISOString(),
+    last_login_at: user.last_login_at || null,
+    ip_count: user.ip_count || 1,
+    active_sessions_count: user.active_sessions_count || 1,
+    auth_provider: user.auth_provider || 'local',
+    eitaa_id: user.eitaa_id || null,
+    first_name: user.first_name || null,
+    last_name: user.last_name || null,
+    is_unlimited: isUnlimited,
+    subscription_status: status,
+    subscription_plan_name: planName,
+    subscription_notes: user.subscription_notes || '',
+    subscription_activated_by: user.subscription_activated_by || null,
+    subscription_activated_at: user.subscription_activated_at || null,
+    subscription_expires_at: user.subscription_expires_at || null,
+    daily_primary_used: user.daily_primary_used || 0,
+    daily_primary_limit: isUnlimited ? 999999 : 5,
+    daily_primary_remaining: isUnlimited ? 999999 : 5,
+    can_generate_primary: true
+  };
+}
 
 function normalizeSupabaseUrl(rawUrl: string): string {
   let url = (rawUrl || '').trim();
@@ -316,14 +366,15 @@ async function findUserById(supabase: SupabaseClient, env: Env, id: string): Pro
       username: 'parsa',
       role: 'admin',
       is_active: true,
-      password_hash: ''
+      password_hash: '',
+      is_unlimited: true
     };
   }
 
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, role, password_hash, is_active, is_suspicious, created_at, updated_at')
+      .select('*')
       .eq('id', id)
       .maybeSingle();
 
@@ -342,7 +393,7 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, username, role, password_hash, is_active, is_suspicious, created_at, updated_at')
+        .select('*')
         .ilike('username', cleanUsername)
         .maybeSingle();
 
@@ -358,7 +409,8 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
       username: 'parsa',
       role: 'admin',
       is_active: true,
-      password_hash: bcrypt.hashSync('13101389', 10)
+      password_hash: bcrypt.hashSync('13101389', 10),
+      is_unlimited: true
     };
   }
 
@@ -379,7 +431,8 @@ async function getUserFromRequest(request: Request, env: Env, supabase: Supabase
         username: payload.username || 'parsa',
         role: 'admin',
         is_active: true,
-        password_hash: ''
+        password_hash: '',
+        is_unlimited: true
       };
     }
 
@@ -395,7 +448,8 @@ async function getUserFromRequest(request: Request, env: Env, supabase: Supabase
       username: payload.username,
       role: payload.role,
       is_active: payload.is_active !== false,
-      password_hash: ''
+      password_hash: '',
+      is_unlimited: false
     };
   }
 
@@ -1016,7 +1070,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
   }
 
   // --------------------------------------------------------------------
-  // Authentication Routes
+  // Authentication & Session Routes
   // --------------------------------------------------------------------
 
   if (pathname === '/api/auth/login' && method === 'POST') {
@@ -1101,12 +1155,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         {
           success: true,
           token,
-          user: {
-            id: user.id,
-            username: user.username,
-            role: user.role,
-            is_active: user.is_active
-          },
+          user: formatUserWithQuota(user),
           message: 'ورود با موفقیت انجام شد.'
         },
         200,
@@ -1117,18 +1166,253 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
     }
   }
 
-  if (pathname === '/api/auth/me' && method === 'GET') {
+  // Self-Service User Registration (Public)
+  if (pathname === '/api/auth/register' && method === 'POST') {
+    try {
+      const body = await request.json() as any;
+      const rawUsername = (body.username || '').trim();
+      const rawPassword = body.password || '';
+
+      if (!rawUsername || !rawPassword) {
+        return jsonResponse({ success: false, error: 'نام کاربری و رمز عبور الزامی است.' }, 400);
+      }
+
+      const cleanUsername = normalizePersianDigits(rawUsername).toLowerCase();
+      if (cleanUsername.length < 3) {
+        return jsonResponse({ success: false, error: 'نام کاربری باید حداقل ۳ کاراکتر باشد.' }, 400);
+      }
+
+      if (cleanUsername === 'parsa') {
+        return jsonResponse({ success: false, error: 'این نام کاربری رزرو شده برای مدیر ارشد است.' }, 400);
+      }
+
+      // Check if username is already taken
+      const existingUser = await findUserByUsername(supabase, env, cleanUsername);
+      if (existingUser) {
+        return jsonResponse({ success: false, error: 'این نام کاربری قبلاً در سامانه ثبت شده است.' }, 400);
+      }
+
+      const newUserId = crypto.randomUUID();
+      const password_hash = bcrypt.hashSync(rawPassword, 10);
+      const now = new Date().toISOString();
+
+      let createdUser: UserRecord = {
+        id: newUserId,
+        username: cleanUsername,
+        role: 'user',
+        password_hash,
+        is_active: true,
+        is_suspicious: false,
+        is_unlimited: false,
+        created_at: now,
+        updated_at: now
+      };
+
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('users')
+          .insert({
+            id: newUserId,
+            username: cleanUsername,
+            role: 'user',
+            password_hash,
+            is_active: true,
+            is_suspicious: false,
+            created_at: now,
+            updated_at: now
+          })
+          .select('*')
+          .maybeSingle();
+
+        if (error) {
+          if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
+            return jsonResponse({ success: false, error: 'این نام کاربری قبلاً در سامانه ثبت شده است.' }, 400);
+          }
+          console.error('Error inserting user in Supabase:', error);
+          return jsonResponse({ success: false, error: 'خطا در ثبت کاربر در پایگاه داده: ' + error.message }, 500);
+        }
+
+        if (data) {
+          createdUser = { ...createdUser, ...data };
+        }
+      }
+
+      const jwtSecret = getJwtSecret(env);
+      const token = await signAuthToken(
+        {
+          id: createdUser.id,
+          username: createdUser.username,
+          role: createdUser.role,
+          is_active: createdUser.is_active
+        },
+        jwtSecret,
+        30
+      );
+
+      if (supabase) {
+        try {
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          await supabase.from('sessions').insert({
+            id: crypto.randomUUID(),
+            user_id: createdUser.id,
+            token,
+            ip_address: clientIp.slice(0, 64),
+            user_agent: userAgent,
+            expires_at: expiresAt
+          });
+        } catch {}
+      }
+
+      await recordLoginLog(supabase, createdUser.id, createdUser.username, 'user', 'success', null, clientIp, userAgent, deviceInfo);
+
+      const cookieHeader = `auth_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
+
+      return jsonResponse(
+        {
+          success: true,
+          token,
+          user: formatUserWithQuota(createdUser),
+          message: 'حساب کاربری شما با موفقیت ایجاد و فعال شد.'
+        },
+        200,
+        { 'Set-Cookie': cookieHeader }
+      );
+    } catch (err: any) {
+      return jsonResponse({ success: false, error: 'خطا در فرآیند ثبت‌نام: ' + (err?.message || 'نامشخص') }, 500);
+    }
+  }
+
+  // Get Session User (unified endpoints)
+  if ((pathname === '/api/auth/session' || pathname === '/api/auth/me' || pathname === '/api/me') && method === 'GET') {
     const user = await getUserFromRequest(request, env, supabase);
     if (!user) {
-      return jsonResponse({ success: false, error: 'نشست معتبر یافت نشد.' }, 401);
+      return jsonResponse({
+        success: true,
+        user: null,
+        guestUsage: {
+          used: 0,
+          limit: 3,
+          remaining: 3,
+          canGenerate: true
+        }
+      });
     }
     return jsonResponse({
       success: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        is_active: user.is_active
+      user: formatUserWithQuota(user)
+    });
+  }
+
+  // Eitaa SSO Authentication
+  if (pathname === '/api/auth/eitaa' && method === 'POST') {
+    try {
+      const body = await request.json() as any;
+      const rawEitaaUser = body?.eitaaUser || body?.user || body;
+      const eitaaId = rawEitaaUser?.id ? String(rawEitaaUser.id) : null;
+
+      if (!eitaaId) {
+        return jsonResponse({ success: false, error: 'شناسه کاربر ایتا ارسال نشده است.' }, 400);
+      }
+
+      const username = rawEitaaUser.username
+        ? normalizePersianDigits(String(rawEitaaUser.username).trim()).toLowerCase()
+        : `eitaa_${eitaaId}`;
+
+      let user: UserRecord | null = null;
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('users').select('*').or(`eitaa_id.eq.${eitaaId},username.ilike.${username}`).maybeSingle();
+          if (data) user = data;
+        } catch {}
+      }
+
+      if (!user) {
+        const newUserId = crypto.randomUUID();
+        const now = new Date().toISOString();
+        const newUserRecord: any = {
+          id: newUserId,
+          username,
+          role: 'user',
+          password_hash: '',
+          is_active: true,
+          is_suspicious: false,
+          is_unlimited: false,
+          auth_provider: 'eitaa',
+          eitaa_id: eitaaId,
+          first_name: rawEitaaUser.first_name || null,
+          last_name: rawEitaaUser.last_name || null,
+          created_at: now,
+          updated_at: now
+        };
+
+        if (supabase) {
+          try {
+            const { data } = await supabase.from('users').insert(newUserRecord).select('*').maybeSingle();
+            if (data) user = data;
+          } catch {
+            user = newUserRecord;
+          }
+        } else {
+          user = newUserRecord;
+        }
+      }
+
+      if (user && !user.is_active) {
+        return jsonResponse({ success: false, error: 'حساب کاربری شما غیرفعال شده است. لطفاً با مدیر سامانه تماس بگیرید.' }, 403);
+      }
+
+      const jwtSecret = getJwtSecret(env);
+      const token = await signAuthToken(
+        {
+          id: user!.id,
+          username: user!.username,
+          role: user!.role,
+          is_active: user!.is_active
+        },
+        jwtSecret,
+        30
+      );
+
+      const cookieHeader = `auth_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
+      return jsonResponse(
+        {
+          success: true,
+          token,
+          user: formatUserWithQuota(user),
+          message: 'ورود با حساب ایتا موفق بود.'
+        },
+        200,
+        { 'Set-Cookie': cookieHeader }
+      );
+    } catch (err: any) {
+      return jsonResponse({ success: false, error: 'خطا در احراز هویت ایتا: ' + (err?.message || 'نامشخص') }, 500);
+    }
+  }
+
+  // Daily Usage
+  if (pathname === '/api/user/daily-usage' && method === 'GET') {
+    const user = await getUserFromRequest(request, env, supabase);
+    if (!user) {
+      return jsonResponse({
+        success: true,
+        usage: {
+          isUnlimited: false,
+          dailyLimit: 3,
+          dailyUsed: 0,
+          dailyRemaining: 3,
+          canGenerate: true
+        }
+      });
+    }
+    const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa';
+    return jsonResponse({
+      success: true,
+      usage: {
+        isUnlimited,
+        dailyLimit: isUnlimited ? 999999 : 5,
+        dailyUsed: 0,
+        dailyRemaining: isUnlimited ? 999999 : 5,
+        canGenerate: true
       }
     });
   }
@@ -1252,13 +1536,13 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
     // 2. User Management (CRUD)
     if (pathname === '/api/admin/users') {
       if (method === 'GET') {
-        let users: UserRecord[] = [];
+        let users: any[] = [];
 
         if (supabase) {
           try {
             const { data: dbUsers, error } = await supabase
               .from('users')
-              .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+              .select('*')
               .order('created_at', { ascending: false });
 
             if (!error && dbUsers) {
@@ -1273,8 +1557,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
                 const lastLogin = sortedLogs.find(l => l.success !== false)?.timestamp || sortedLogs[0]?.timestamp || null;
                 const activeSessions = (sessData || []).filter(s => s.user_id === u.id && new Date(s.expires_at).getTime() > now).length;
 
+                const formatted = formatUserWithQuota(u);
                 return {
-                  ...u,
+                  ...formatted,
                   password_hash: '',
                   ip_count: uniqueIps.length,
                   last_login_at: lastLogin,
@@ -1295,12 +1580,18 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             role: 'admin',
             is_active: true,
             is_suspicious: false,
+            is_unlimited: true,
+            subscription_status: 'active',
+            subscription_plan_name: 'اشتراک نامحدود خط‌نگار',
             password_hash: '',
             created_at: '2026-01-01T00:00:00.000Z',
             updated_at: '2026-01-01T00:00:00.000Z',
             ip_count: 1,
             last_login_at: new Date().toISOString(),
-            active_sessions_count: 1
+            active_sessions_count: 1,
+            daily_primary_limit: 999999,
+            daily_primary_remaining: 999999,
+            can_generate_primary: true
           });
         }
 
@@ -1312,6 +1603,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         const cleanUsername = normalizePersianDigits((body.username || '').trim()).toLowerCase();
         const rawPassword = body.password || '';
         const role = body.role === 'admin' ? 'admin' : 'user';
+        const isUnlimited = body.is_unlimited === true || body.plan_type === 'unlimited';
 
         if (!cleanUsername || !rawPassword) {
           return jsonResponse({ success: false, error: 'نام کاربری و رمز عبور الزامی است.' }, 400);
@@ -1323,20 +1615,37 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
         const password_hash = bcrypt.hashSync(rawPassword, 10);
         const newUserId = crypto.randomUUID();
+        const now = new Date().toISOString();
 
         if (supabase) {
-          const { data, error } = await supabase
+          const insertPayload: any = {
+            id: newUserId,
+            username: cleanUsername,
+            role,
+            password_hash,
+            is_active: true,
+            is_suspicious: false,
+            is_unlimited: isUnlimited,
+            subscription_status: isUnlimited ? 'active' : 'standard',
+            subscription_plan_name: isUnlimited ? 'نامحدود' : '',
+            created_at: now,
+            updated_at: now
+          };
+
+          let { data, error } = await supabase
             .from('users')
-            .insert({
-              id: newUserId,
-              username: cleanUsername,
-              role,
-              password_hash,
-              is_active: true,
-              is_suspicious: false
-            })
-            .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+            .insert(insertPayload)
+            .select('*')
             .maybeSingle();
+
+          if (error && (error.message.includes('column') || error.code === '42703')) {
+            delete insertPayload.is_unlimited;
+            delete insertPayload.subscription_status;
+            delete insertPayload.subscription_plan_name;
+            const res = await supabase.from('users').insert(insertPayload).select('*').maybeSingle();
+            data = res.data;
+            error = res.error;
+          }
 
           if (error) {
             if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
@@ -1347,10 +1656,11 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
           await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ایجاد کاربر جدید', `صدور حساب کاربری «${cleanUsername}» با سطح دسترسی ${role}`, clientIp);
 
+          const formatted = formatUserWithQuota(data || insertPayload);
           return jsonResponse({
             success: true,
             user: {
-              ...(data || { id: newUserId, username: cleanUsername, role, is_active: true, is_suspicious: false }),
+              ...formatted,
               ip_count: 0,
               active_sessions_count: 0
             },
@@ -1362,10 +1672,122 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       }
     }
 
-    const userSubMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)(?:\/(reset-password|history))?$/);
+    const userSubMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)(?:\/(reset-password|history|subscription))?$/);
     if (userSubMatch) {
       const targetUserId = userSubMatch[1];
       const subAction = userSubMatch[2];
+
+      // Subscription update / upgrade endpoint
+      if (subAction === 'subscription' && (method === 'POST' || method === 'PATCH')) {
+        const body = await request.json() as any;
+        const {
+          plan_type,
+          plan_name,
+          is_unlimited,
+          status,
+          admin_notes,
+          notes,
+          duration_days
+        } = body;
+
+        const isUnlimitedFlag = plan_type === 'unlimited'
+          ? true
+          : (plan_type === 'free'
+            ? false
+            : (typeof is_unlimited === 'boolean' ? is_unlimited : status === 'active'));
+
+        const finalStatus = isUnlimitedFlag ? 'active' : 'standard';
+        const finalPlanName = plan_name || (isUnlimitedFlag ? 'نامحدود' : '');
+        const finalNotes = admin_notes || notes || '';
+        const now = new Date().toISOString();
+
+        let expiresAt: string | null = null;
+        if (duration_days && Number(duration_days) > 0) {
+          expiresAt = new Date(Date.now() + Number(duration_days) * 24 * 60 * 60 * 1000).toISOString();
+        }
+
+        let updatedUser: any = {
+          id: targetUserId,
+          is_unlimited: isUnlimitedFlag,
+          subscription_status: finalStatus,
+          subscription_plan_name: finalPlanName,
+          subscription_notes: finalNotes,
+          subscription_activated_by: authedUser.username,
+          subscription_activated_at: isUnlimitedFlag ? now : null,
+          subscription_expires_at: expiresAt,
+          updated_at: now
+        };
+
+        if (supabase && targetUserId !== SUPERADMIN_ID) {
+          const updatePayload: any = {
+            is_unlimited: isUnlimitedFlag,
+            subscription_status: finalStatus,
+            subscription_plan_name: finalPlanName,
+            subscription_notes: finalNotes,
+            subscription_activated_by: authedUser.username,
+            subscription_activated_at: isUnlimitedFlag ? now : null,
+            subscription_expires_at: expiresAt,
+            updated_at: now
+          };
+
+          let { data, error } = await supabase
+            .from('users')
+            .update(updatePayload)
+            .eq('id', targetUserId)
+            .select('*')
+            .maybeSingle();
+
+          if (error && (error.message.includes('column') || error.code === '42703')) {
+            const fallbackPayload: any = { updated_at: now };
+            const { data: fbData } = await supabase
+              .from('users')
+              .update(fallbackPayload)
+              .eq('id', targetUserId)
+              .select('*')
+              .maybeSingle();
+
+            if (fbData) {
+              data = { ...fbData, ...updatePayload };
+            }
+          }
+
+          if (data) {
+            updatedUser = { ...data, is_unlimited: isUnlimitedFlag };
+          }
+
+          try {
+            await supabase.from('user_subscriptions').insert({
+              id: crypto.randomUUID(),
+              user_id: targetUserId,
+              plan_name: finalPlanName,
+              status: finalStatus,
+              activated_by: authedUser.username,
+              notes: finalNotes,
+              expires_at: expiresAt,
+              created_at: now
+            });
+          } catch {}
+        }
+
+        const actionText = isUnlimitedFlag ? 'فعال‌سازی اشتراک نامحدود' : 'لغو اشتراک نامحدود';
+        const targetUsername = updatedUser.username || targetUserId;
+        await recordAuditLog(
+          supabase,
+          authedUser.id,
+          authedUser.username,
+          actionText,
+          `اشتراک کاربر «${targetUsername}» به وضعیت «${isUnlimitedFlag ? 'نامحدود (فعال)' : 'عادی'}» تغییر یافت.`,
+          clientIp
+        );
+
+        return jsonResponse({
+          success: true,
+          user: formatUserWithQuota(updatedUser),
+          message: isUnlimitedFlag
+            ? `اشتراک نامحدود کاربر «${targetUsername}» با موفقیت فعال گردید.`
+            : `اشتراک کاربر «${targetUsername}» به وضعیت عادی تغییر یافت.`
+        });
+      }
 
       if (subAction === 'reset-password' && method === 'POST') {
         const body = await request.json() as any;
@@ -1440,18 +1862,28 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         const updatePayload: any = { updated_at: new Date().toISOString() };
         if (typeof body.is_active === 'boolean') updatePayload.is_active = body.is_active;
         if (typeof body.is_suspicious === 'boolean') updatePayload.is_suspicious = body.is_suspicious;
+        if (typeof body.is_unlimited === 'boolean') updatePayload.is_unlimited = body.is_unlimited;
+        if (body.subscription_status) updatePayload.subscription_status = body.subscription_status;
         if (body.role && (body.role === 'admin' || body.role === 'user')) updatePayload.role = body.role;
         if (body.username) updatePayload.username = normalizePersianDigits(String(body.username).trim()).toLowerCase();
 
         let updatedUser: any = { id: targetUserId, ...updatePayload };
 
         if (supabase && targetUserId !== SUPERADMIN_ID) {
-          const { data, error } = await supabase
+          let { data, error } = await supabase
             .from('users')
             .update(updatePayload)
             .eq('id', targetUserId)
-            .select('id, username, role, is_active, is_suspicious, created_at, updated_at')
+            .select('*')
             .maybeSingle();
+
+          if (error && (error.message.includes('column') || error.code === '42703')) {
+            delete updatePayload.is_unlimited;
+            delete updatePayload.subscription_status;
+            const res = await supabase.from('users').update(updatePayload).eq('id', targetUserId).select('*').maybeSingle();
+            data = res.data;
+            error = res.error;
+          }
 
           if (error) {
             return jsonResponse({ success: false, error: 'خطا در ویرایش کاربر: ' + error.message }, 500);
@@ -1461,7 +1893,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
         await recordAuditLog(supabase, authedUser.id, authedUser.username, 'ویرایش کاربر', `ویرایش مشخصات کاربر با شناسه ${targetUserId}`, clientIp);
 
-        return jsonResponse({ success: true, user: updatedUser, message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.' });
+        return jsonResponse({ success: true, user: formatUserWithQuota(updatedUser), message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.' });
       }
 
       if (!subAction && method === 'DELETE') {

@@ -1237,7 +1237,7 @@ export const DEFAULT_APP_SETTINGS = {
   login_password_label_fa: 'رمز عبور',
   login_password_placeholder_fa: 'رمز عبور شما',
   login_button_fa: 'ورود به سامانه',
-  login_notice_fa: 'ایجاد و فعال‌سازی حساب‌های کاربری صرفاً توسط مدیریت سامانه انجام می‌پذیرد.',
+  login_notice_fa: '',
 
   // Welcome Celebration Card
   welcome_badge_fa: 'ورود با موفقیت انجام شد',

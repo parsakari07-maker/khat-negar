@@ -172,11 +172,11 @@ export function AdminUsers() {
         body: JSON.stringify({
           plan_type: newPlan,
           status: 'active',
-          admin_notes: newPlan === 'unlimited' ? 'فعال‌سازی سریع نامحدود از پنل' : 'تغییر به رایگان از پنل'
+          admin_notes: newPlan === 'unlimited' ? 'فعال‌سازی سریع نامحدود از پنل' : 'تغییر به وضعیت عادی از پنل'
         })
       });
       if (ok && data.success) {
-        setSuccessMessage(`اشتراک کاربر «${user.username}» به حالت «${newPlan === 'unlimited' ? 'نامحدود' : 'رایگان'}» تغییر یافت.`);
+        setSuccessMessage(newPlan === 'unlimited' ? `اشتراک نامحدود برای کاربر «${user.username}» فعال شد.` : `اشتراک کاربر «${user.username}» به حالت عادی تغییر یافت.`);
         fetchUsers();
         setTimeout(() => setSuccessMessage(null), 4000);
       } else {
@@ -409,10 +409,10 @@ export function AdminUsers() {
                       <button
                         type="button"
                         onClick={() => handleOpenSubscription(u)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-500/10 hover:bg-gray-500/20 text-[var(--text-muted)] text-[11px] font-medium transition cursor-pointer"
+                        className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-gray-500/10 hover:bg-gray-500/20 text-[var(--text-secondary)] text-[11px] font-medium transition cursor-pointer"
                         title="کلیک جهت ارتقا به اشتراک نامحدود"
                       >
-                        <span>رایگان (۱/روز)</span>
+                        <span>رایگان</span>
                       </button>
                     )}
                   </td>
@@ -885,10 +885,10 @@ export function AdminUsers() {
                   {targetUser.is_unlimited ? (
                     <span className="text-amber-600 dark:text-amber-400 font-bold inline-flex items-center gap-1">
                       <Crown className="w-3.5 h-3.5" />
-                      <span>اشتراک نامحدود فعال</span>
+                      <span>نامحدود</span>
                     </span>
                   ) : (
-                    <span className="text-[var(--text-muted)]">حساب رایگان (۱ پرامپت اصلی در روز)</span>
+                    <span className="text-[var(--text-secondary)] font-bold">رایگان</span>
                   )}
                 </span>
               </div>
@@ -938,7 +938,7 @@ export function AdminUsers() {
                       <Zap className="w-4 h-4 text-[#F55951]" />
                     </div>
                     <span className="text-[10px] text-[var(--text-muted)] leading-tight">
-                      ۱ اصلی/روز + بازتولید آزاد
+                      سهمیه استاندارد
                     </span>
                   </button>
                 </div>

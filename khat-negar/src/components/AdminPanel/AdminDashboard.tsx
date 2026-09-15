@@ -172,6 +172,62 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (tab: string) => vo
         ))}
       </div>
 
+      {/* Daily Usage 24-Hour Statistics Section */}
+      <div className="p-5 rounded-3xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-color)] pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                آمار مصرف ۲۴ ساعت اخیر (مبتنی بر دیتابیس)
+              </h3>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                آمار دقیق محاسبه‌شده از جدول لاگ‌های تولید در بازه زمانی ۲۴ ساعت گذشته
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
+            مرجع محاسباتی معتبر
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3.5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
+            <span className="text-[11px] font-semibold text-[var(--text-muted)] block">تولیدهای اصلی (۲۴س)</span>
+            <div className="text-xl font-black text-[var(--text-primary)] mt-1">
+              {stats.todayPrimaryGenerations ?? 0}
+            </div>
+            <span className="text-[10px] text-[var(--text-secondary)]">مصرف‌کننده سهمیه روزانه</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
+            <span className="text-[11px] font-semibold text-[var(--text-muted)] block">بازتولیدها (۲۴س)</span>
+            <div className="text-xl font-black text-amber-500 mt-1">
+              {stats.todayGenerateAgain ?? 0}
+            </div>
+            <span className="text-[10px] text-[var(--text-secondary)]">تولید مجدد بدون کسر سهمیه</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
+            <span className="text-[11px] font-semibold text-[var(--text-muted)] block">کل تولیدها (۲۴س)</span>
+            <div className="text-xl font-black text-[#F55951] mt-1">
+              {stats.todayGenerations ?? 0}
+            </div>
+            <span className="text-[10px] text-[var(--text-secondary)]">مجموع تولید و بازتولید</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
+            <span className="text-[11px] font-semibold text-[var(--text-muted)] block">کاربران فعال (۲۴س)</span>
+            <div className="text-xl font-black text-indigo-500 mt-1">
+              {stats.todayActiveUsersCount ?? 0}
+            </div>
+            <span className="text-[10px] text-[var(--text-secondary)]">کاربران دارای فعالیت تولید</span>
+          </div>
+        </div>
+      </div>
+
       {/* Tables: Recent Logins & Recent Audit Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Logins Feed */}

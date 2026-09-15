@@ -580,16 +580,20 @@ class DatabaseEngine {
     remaining: number;
     canGeneratePrimary: boolean;
     isUnlimited: boolean;
+    lastPrimaryUsageAt?: string | null;
+    nextResetAt?: string | null;
   } {
     const user = userId ? this.data.users.find(u => u.id === userId) : undefined;
-    const startOfDay = this.getTehranStartOfDay();
+    const windowMs = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const windowStartMs = nowMs - windowMs;
 
     // 1. If user is an active unlimited subscriber or admin, grant unlimited quota immediately
     const isUnlimited = !!user && (
       user.role === 'admin' ||
       !!user.is_unlimited ||
       (user.subscription_status === 'active' &&
-        (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()))
+        (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > nowMs))
     );
 
     const freeLimit = Number(this.data.app_settings?.daily_free_limit) > 0
@@ -598,10 +602,10 @@ class DatabaseEngine {
 
     if (isUnlimited) {
       const dailyPrimaryUsed = (this.data.generation_logs || []).filter(
-        l => l.user_id === user!.id && !l.is_generate_again && new Date(l.timestamp).getTime() >= startOfDay
+        l => l.user_id === user!.id && !l.is_generate_again && new Date(l.timestamp).getTime() >= windowStartMs
       ).length;
       const dailyGenerateAgainUsed = (this.data.generation_logs || []).filter(
-        l => l.user_id === user!.id && !!l.is_generate_again && new Date(l.timestamp).getTime() >= startOfDay
+        l => l.user_id === user!.id && !!l.is_generate_again && new Date(l.timestamp).getTime() >= windowStartMs
       ).length;
 
       return {
@@ -610,18 +614,19 @@ class DatabaseEngine {
         dailyLimit: 999999,
         remaining: 999999,
         canGeneratePrimary: true,
-        isUnlimited: true
+        isUnlimited: true,
+        lastPrimaryUsageAt: user?.last_primary_generation_at || null,
+        nextResetAt: null
       };
     }
 
-    // 2. Multi-factor free quota checking:
-    // We check usage against user_id, eitaa_id, AND device_fingerprint.
-    // This strictly prevents a user from creating multiple accounts to get more than 1 free generation per day.
+    // 2. Multi-factor 24-hour free quota checking:
+    // Checks usage in the last 24-hour window against user_id, eitaa_id, AND device_fingerprint.
     const effectiveFp = options?.deviceFingerprint || user?.created_device_fingerprint;
     const effectiveEitaaId = options?.eitaaId || user?.eitaa_id;
 
     const matchingPrimaryLogs = (this.data.generation_logs || []).filter(l => {
-      if (new Date(l.timestamp).getTime() < startOfDay) return false;
+      if (new Date(l.timestamp).getTime() < windowStartMs) return false;
       if (l.is_generate_again) return false;
 
       // 1. Match account ID
@@ -634,10 +639,10 @@ class DatabaseEngine {
       if (effectiveFp && l.device_fingerprint && l.device_fingerprint === effectiveFp) return true;
 
       return false;
-    });
+    }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     const matchingAgainLogs = (this.data.generation_logs || []).filter(l => {
-      if (new Date(l.timestamp).getTime() < startOfDay) return false;
+      if (new Date(l.timestamp).getTime() < windowStartMs) return false;
       if (!l.is_generate_again) return false;
 
       if (user && l.user_id === user.id) return true;
@@ -647,10 +652,19 @@ class DatabaseEngine {
       return false;
     });
 
-    const dailyPrimaryUsed = matchingPrimaryLogs.length;
+    const userLastPrimaryAt = user?.last_primary_generation_at ? new Date(user.last_primary_generation_at).getTime() : 0;
+    const userUsedWithin24h = userLastPrimaryAt > (nowMs - windowMs);
+
+    const dailyPrimaryUsed = (matchingPrimaryLogs.length > 0 || userUsedWithin24h) ? 1 : 0;
     const dailyGenerateAgainUsed = matchingAgainLogs.length;
     const remaining = Math.max(0, freeLimit - dailyPrimaryUsed);
     const canGeneratePrimary = dailyPrimaryUsed < freeLimit;
+
+    const latestLogTimestamp = matchingPrimaryLogs[0] ? new Date(matchingPrimaryLogs[0].timestamp).getTime() : userLastPrimaryAt;
+    const lastPrimaryUsageAt = latestLogTimestamp > 0 ? new Date(latestLogTimestamp).toISOString() : null;
+    const nextResetAt = (!canGeneratePrimary && latestLogTimestamp > 0)
+      ? new Date(latestLogTimestamp + windowMs).toISOString()
+      : null;
 
     return {
       dailyPrimaryUsed,
@@ -658,7 +672,9 @@ class DatabaseEngine {
       dailyLimit: freeLimit,
       remaining,
       canGeneratePrimary,
-      isUnlimited: false
+      isUnlimited: false,
+      lastPrimaryUsageAt,
+      nextResetAt
     };
   }
 
@@ -712,6 +728,9 @@ class DatabaseEngine {
       can_generate_primary: usage.canGeneratePrimary,
       today_primary_count: usage.dailyPrimaryUsed,
       today_generate_again_count: usage.dailyGenerateAgainUsed,
+      last_usage_at: storedUser.last_usage_at || null,
+      last_primary_generation_at: storedUser.last_primary_generation_at || usage.lastPrimaryUsageAt || null,
+      next_reset_at: usage.nextResetAt || null,
       subscription: lastSubscription
     };
   }
@@ -1444,32 +1463,86 @@ class DatabaseEngine {
     if (this.data.generation_logs.length > 10000) {
       this.data.generation_logs = this.data.generation_logs.slice(0, 10000);
     }
+
+    if (params.userId) {
+      const user = this.data.users.find(u => u.id === params.userId);
+      if (user) {
+        user.last_usage_at = log.timestamp;
+        if (!params.isGenerateAgain) {
+          user.last_primary_generation_at = log.timestamp;
+        }
+      }
+    }
+
     this.saveDatabase();
   }
 
   getGenerationStats(): {
     totalGenerations: number;
     totalGenerateAgain: number;
+    todayGenerations: number;
+    todayPrimaryGenerations: number;
+    todayGenerateAgain: number;
+    todayActiveUsersCount: number;
     recentGenerations: GenerationLog[];
   } {
+    const windowMs = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const windowStartMs = nowMs - windowMs;
+
     const total = this.data.generation_logs.length;
     const again = this.data.generation_logs.filter(g => g.is_generate_again).length;
+    const last24hLogs = this.data.generation_logs.filter(
+      g => new Date(g.timestamp).getTime() >= windowStartMs
+    );
+    const todayGenerations = last24hLogs.length;
+    const todayPrimaryGenerations = last24hLogs.filter(g => !g.is_generate_again).length;
+    const todayGenerateAgain = last24hLogs.filter(g => !!g.is_generate_again).length;
+    const todayActiveUsersSet = new Set(
+      last24hLogs.map(g => g.user_id || g.username).filter(Boolean)
+    );
+
     return {
       totalGenerations: total,
       totalGenerateAgain: again,
+      todayGenerations,
+      todayPrimaryGenerations,
+      todayGenerateAgain,
+      todayActiveUsersCount: todayActiveUsersSet.size,
       recentGenerations: this.data.generation_logs.slice(0, 20)
     };
   }
 
   // --- Dashboard Aggregates ---
   getDashboardStats() {
+    const windowMs = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const windowStartMs = nowMs - windowMs;
+
     const users = this.data.users;
     const totalUsers = users.length;
     const activeUsers = users.filter(u => u.is_active).length;
     const inactiveUsers = totalUsers - activeUsers;
+    const unlimitedUsersCount = users.filter(
+      u => u.is_unlimited || u.subscription_status === 'active' || u.role === 'admin'
+    ).length;
+
     const pendingSecurityEvents = this.data.security_events.filter(e => e.status === 'pending').length;
     const totalGenerations = this.data.generation_logs.length;
     const totalGenerateAgain = this.data.generation_logs.filter(g => g.is_generate_again).length;
+
+    // Daily 24-hour authoritative generation statistics
+    const last24hLogs = this.data.generation_logs.filter(
+      g => new Date(g.timestamp).getTime() >= windowStartMs
+    );
+    const todayGenerations = last24hLogs.length;
+    const todayPrimaryGenerations = last24hLogs.filter(g => !g.is_generate_again).length;
+    const todayGenerateAgain = last24hLogs.filter(g => !!g.is_generate_again).length;
+    const todayActiveUsersSet = new Set(
+      last24hLogs.map(g => g.user_id || g.username).filter(Boolean)
+    );
+    const todayActiveUsersCount = todayActiveUsersSet.size;
+
     const activeMasterPrompts = this.data.master_prompts.filter(mp => mp.active).length;
     const activeStyles = this.data.typography_styles.filter(s => s.active).length;
     const totalFeedbacks = (this.data.feedback_reports || []).length;
@@ -1481,9 +1554,14 @@ class DatabaseEngine {
       totalUsers,
       activeUsers,
       inactiveUsers,
+      unlimitedUsersCount,
       pendingSecurityEvents,
       totalGenerations,
       totalGenerateAgain,
+      todayGenerations,
+      todayPrimaryGenerations,
+      todayGenerateAgain,
+      todayActiveUsersCount,
       activeMasterPrompts,
       activeStyles,
       totalFeedbacks,
@@ -1714,6 +1792,15 @@ CREATE TABLE IF NOT EXISTS users (
     first_name VARCHAR(150),
     last_name VARCHAR(150),
     created_device_fingerprint VARCHAR(128),
+    is_unlimited BOOLEAN NOT NULL DEFAULT false,
+    subscription_status VARCHAR(30) NOT NULL DEFAULT 'free',
+    subscription_plan_name VARCHAR(150),
+    subscription_expires_at TIMESTAMPTZ,
+    subscription_activated_at TIMESTAMPTZ,
+    subscription_activated_by VARCHAR(100),
+    subscription_notes TEXT,
+    last_usage_at TIMESTAMPTZ,
+    last_primary_generation_at TIMESTAMPTZ,
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

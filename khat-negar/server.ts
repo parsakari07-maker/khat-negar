@@ -465,6 +465,8 @@ async function startServer() {
         eitaaId: req.user.eitaa_id
       }) : null;
 
+      const freshUser = req.user ? db.getUserById(req.user.id, req.deviceFingerprint) : null;
+
       return res.json({
         success: true,
         prompt: result.prompt,
@@ -474,8 +476,12 @@ async function startServer() {
         masterPromptIndex: result.masterPromptIndex,
         totalActiveMasterPrompts: result.totalActive,
         daily_primary_used: updatedUsage ? updatedUsage.dailyPrimaryUsed : 1,
+        daily_primary_limit: updatedUsage ? updatedUsage.dailyLimit : 1,
         daily_primary_remaining: updatedUsage ? updatedUsage.remaining : 0,
+        can_generate_primary: updatedUsage ? updatedUsage.canGeneratePrimary : false,
         is_unlimited: updatedUsage ? updatedUsage.isUnlimited : false,
+        next_reset_at: updatedUsage ? updatedUsage.nextResetAt : null,
+        user: freshUser,
         message: 'پرامپت با موفقیت تولید شد.'
       });
     } catch (err: any) {

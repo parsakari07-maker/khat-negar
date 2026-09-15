@@ -36,6 +36,9 @@ export interface User {
   can_generate_primary?: boolean;
   today_primary_count?: number;
   today_generate_again_count?: number;
+  last_usage_at?: string | null;
+  last_primary_generation_at?: string | null;
+  next_reset_at?: string | null;
   subscription?: UserSubscription;
 }
 

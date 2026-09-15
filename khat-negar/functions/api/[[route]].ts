@@ -54,11 +54,18 @@ export interface UserRecord {
 
 const SUPERADMIN_ID = '00000000-0000-0000-0000-000000000001';
 
-function formatUserWithQuota(user: any): any {
+function formatUserWithQuota(user: any, usage?: any): any {
   if (!user) return null;
-  const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa';
+  const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa' || (user.subscription_status === 'active' && (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()));
   const planName = user.subscription_plan_name || (isUnlimited ? 'نامحدود' : '');
-  const status = isUnlimited ? 'active' : (user.subscription_status || 'standard');
+  const status = isUnlimited ? 'active' : (user.subscription_status || 'free');
+
+  const dailyPrimaryUsed = usage ? usage.dailyPrimaryUsed : (user.daily_primary_used || 0);
+  const dailyGenerateAgainUsed = usage ? usage.dailyGenerateAgainUsed : (user.today_generate_again_count || 0);
+  const dailyLimit = isUnlimited ? 999999 : (usage ? usage.dailyLimit : 1);
+  const remaining = isUnlimited ? 999999 : (usage ? usage.remaining : Math.max(0, 1 - dailyPrimaryUsed));
+  const canGenerate = isUnlimited || remaining > 0;
+  const nextReset = usage?.nextResetAt || user.next_reset_at || null;
 
   return {
     id: user.id,
@@ -69,6 +76,9 @@ function formatUserWithQuota(user: any): any {
     created_at: user.created_at || new Date().toISOString(),
     updated_at: user.updated_at || new Date().toISOString(),
     last_login_at: user.last_login_at || null,
+    last_usage_at: user.last_usage_at || null,
+    last_primary_generation_at: user.last_primary_generation_at || usage?.lastPrimaryUsageAt || null,
+    next_reset_at: nextReset,
     ip_count: user.ip_count || 1,
     active_sessions_count: user.active_sessions_count || 1,
     auth_provider: user.auth_provider || 'local',
@@ -82,11 +92,124 @@ function formatUserWithQuota(user: any): any {
     subscription_activated_by: user.subscription_activated_by || null,
     subscription_activated_at: user.subscription_activated_at || null,
     subscription_expires_at: user.subscription_expires_at || null,
-    daily_primary_used: user.daily_primary_used || 0,
-    daily_primary_limit: isUnlimited ? 999999 : 5,
-    daily_primary_remaining: isUnlimited ? 999999 : 5,
-    can_generate_primary: true
+    daily_primary_used: dailyPrimaryUsed,
+    daily_primary_limit: dailyLimit,
+    daily_primary_remaining: remaining,
+    can_generate_primary: canGenerate,
+    today_primary_count: dailyPrimaryUsed,
+    today_generate_again_count: dailyGenerateAgainUsed
   };
+}
+
+async function getUserUsageFromSupabase(
+  supabase: SupabaseClient | null,
+  user: any,
+  deviceFingerprint?: string,
+  eitaaId?: string
+): Promise<{
+  dailyPrimaryUsed: number;
+  dailyGenerateAgainUsed: number;
+  dailyLimit: number;
+  remaining: number;
+  canGeneratePrimary: boolean;
+  isUnlimited: boolean;
+  lastPrimaryUsageAt: string | null;
+  nextResetAt: string | null;
+}> {
+  const isUnlimited = !!user && (
+    user.is_unlimited === true ||
+    user.role === 'admin' ||
+    user.id === SUPERADMIN_ID ||
+    user.username === 'parsa' ||
+    (user.subscription_status === 'active' &&
+      (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()))
+  );
+
+  const freeLimit = 1;
+  const windowMs = 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const windowStartIso = new Date(nowMs - windowMs).toISOString();
+
+  if (isUnlimited) {
+    return {
+      dailyPrimaryUsed: 0,
+      dailyGenerateAgainUsed: 0,
+      dailyLimit: 999999,
+      remaining: 999999,
+      canGeneratePrimary: true,
+      isUnlimited: true,
+      lastPrimaryUsageAt: user?.last_primary_generation_at || null,
+      nextResetAt: null
+    };
+  }
+
+  const effectiveFp = deviceFingerprint || user?.created_device_fingerprint;
+  const effectiveEitaaId = eitaaId || user?.eitaa_id;
+
+  let primaryLogs: any[] = [];
+  let againLogs: any[] = [];
+
+  if (supabase) {
+    try {
+      const orFilters: string[] = [];
+      if (user?.id) orFilters.push(`user_id.eq.${user.id}`);
+      if (effectiveFp) orFilters.push(`device_fingerprint.eq.${effectiveFp}`);
+      if (effectiveEitaaId) orFilters.push(`eitaa_id.eq.${effectiveEitaaId}`);
+
+      if (orFilters.length > 0) {
+        const { data } = await supabase
+          .from('generation_logs')
+          .select('id, is_generate_again, timestamp')
+          .gte('timestamp', windowStartIso)
+          .or(orFilters.join(','))
+          .order('timestamp', { ascending: false });
+
+        if (data && Array.isArray(data)) {
+          primaryLogs = data.filter(l => !l.is_generate_again);
+          againLogs = data.filter(l => !!l.is_generate_again);
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching usage from Supabase:', e);
+    }
+  }
+
+  const userLastPrimaryAt = user?.last_primary_generation_at ? new Date(user.last_primary_generation_at).getTime() : 0;
+  const userUsedWithin24h = userLastPrimaryAt > (nowMs - windowMs);
+
+  const dailyPrimaryUsed = (primaryLogs.length > 0 || userUsedWithin24h) ? 1 : 0;
+  const dailyGenerateAgainUsed = againLogs.length;
+  const remaining = Math.max(0, freeLimit - dailyPrimaryUsed);
+  const canGeneratePrimary = dailyPrimaryUsed < freeLimit;
+
+  const latestLogTimestamp = primaryLogs[0] ? new Date(primaryLogs[0].timestamp).getTime() : userLastPrimaryAt;
+  const lastPrimaryUsageAt = latestLogTimestamp > 0 ? new Date(latestLogTimestamp).toISOString() : null;
+  const nextResetAt = (!canGeneratePrimary && latestLogTimestamp > 0)
+    ? new Date(latestLogTimestamp + windowMs).toISOString()
+    : null;
+
+  return {
+    dailyPrimaryUsed,
+    dailyGenerateAgainUsed,
+    dailyLimit: freeLimit,
+    remaining,
+    canGeneratePrimary,
+    isUnlimited: false,
+    lastPrimaryUsageAt,
+    nextResetAt
+  };
+}
+
+// Background cleanup helper: only prunes temporary generation telemetry logs older than 48h (outside 24h admin statistics window)
+// NEVER touches users, subscriptions, accounts, profiles, or settings.
+async function pruneOldStatisticsLogs(supabase: SupabaseClient | null) {
+  if (!supabase) return;
+  try {
+    const cutoff48hIso = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    await supabase.from('generation_logs').delete().lt('timestamp', cutoff48hIso);
+  } catch (e) {
+    // Non-blocking log pruning
+  }
 }
 
 function normalizeSupabaseUrl(rawUrl: string): string {
@@ -551,6 +674,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
   const clientIp = getClientIp(request);
   const userAgent = request.headers.get('user-agent') || 'Unknown';
   const deviceInfo = parseUserAgent(userAgent);
+  const deviceFingerprint = request.headers.get('x-device-fingerprint') || request.headers.get('x-fingerprint') || '';
   const supabase = getSupabase(env);
 
   if (method === 'OPTIONS') {
@@ -844,6 +968,23 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       }
 
       const user = await getUserFromRequest(request, env, supabase);
+      const usage = await getUserUsageFromSupabase(supabase, user, deviceFingerprint, user?.eitaa_id);
+
+      // Enforce 24-hour quota for free users on primary generation
+      if (user && !usage.canGeneratePrimary) {
+        return jsonResponse({
+          success: false,
+          code: 'DAILY_LIMIT_REACHED',
+          error: 'سقف استفاده رایگان شما برای دوره ۲۴ ساعته (۱ بار) تکمیل شده است. برای دسترسی نامحدود به مولد پرامپت، لطفاً اشتراک ویژه خط‌نگار را فعال فرمایید.',
+          daily_primary_used: usage.dailyPrimaryUsed,
+          daily_primary_limit: usage.dailyLimit,
+          daily_primary_remaining: 0,
+          is_unlimited: false,
+          next_reset_at: usage.nextResetAt
+        }, 403);
+      }
+
+      const nowIso = new Date().toISOString();
       if (supabase) {
         try {
           await supabase.from('generation_logs').insert({
@@ -856,10 +997,24 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             style_id: style.id,
             form_id: form.id,
             is_generate_again: false,
-            timestamp: new Date().toISOString()
+            device_fingerprint: deviceFingerprint,
+            eitaa_id: user?.eitaa_id,
+            ip_address: clientIp.slice(0, 64),
+            timestamp: nowIso
           });
+
+          if (user && user.id !== SUPERADMIN_ID) {
+            await supabase.from('users').update({
+              last_usage_at: nowIso,
+              last_primary_generation_at: nowIso,
+              updated_at: nowIso
+            }).eq('id', user.id);
+          }
         } catch {}
       }
+
+      const updatedUsage = await getUserUsageFromSupabase(supabase, user, deviceFingerprint, user?.eitaa_id);
+      const formattedUser = user ? formatUserWithQuota(user, updatedUsage) : null;
 
       return jsonResponse({
         success: true,
@@ -868,6 +1023,13 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         masterPromptName: masterPrompt.name_fa,
         masterPromptIndex: 0,
         totalActiveMasterPrompts: masterPrompts.length,
+        daily_primary_used: updatedUsage.dailyPrimaryUsed,
+        daily_primary_limit: updatedUsage.dailyLimit,
+        daily_primary_remaining: updatedUsage.remaining,
+        can_generate_primary: updatedUsage.canGeneratePrimary,
+        is_unlimited: updatedUsage.isUnlimited,
+        next_reset_at: updatedUsage.nextResetAt,
+        user: formattedUser,
         message: 'پرامپت تخصصی با موفقیت تولید شد.'
       });
     } catch (err: any) {
@@ -982,6 +1144,27 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
       if (aspectRatio.value && !template.includes('--ar')) {
         template += ` --ar ${aspectRatio.value}`;
+      }
+
+      const user = await getUserFromRequest(request, env, supabase);
+      if (supabase) {
+        try {
+          await supabase.from('generation_logs').insert({
+            id: crypto.randomUUID(),
+            user_id: user ? user.id : null,
+            username: user ? user.username : 'مهمان',
+            master_prompt_id: masterPrompt.id,
+            master_prompt_name: masterPrompt.name_fa,
+            ai_model_id: aiModel.id,
+            style_id: style.id,
+            form_id: form.id,
+            is_generate_again: true,
+            device_fingerprint: deviceFingerprint,
+            eitaa_id: user?.eitaa_id,
+            ip_address: clientIp.slice(0, 64),
+            timestamp: new Date().toISOString()
+          });
+        } catch {}
       }
 
       return jsonResponse({
@@ -1149,13 +1332,14 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
       await recordLoginLog(supabase, user.id, user.username, user.role, 'success', null, clientIp, userAgent, deviceInfo);
 
+      const usage = await getUserUsageFromSupabase(supabase, user, deviceFingerprint, user.eitaa_id);
       const cookieHeader = `auth_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
 
       return jsonResponse(
         {
           success: true,
           token,
-          user: formatUserWithQuota(user),
+          user: formatUserWithQuota(user, usage),
           message: 'ورود با موفقیت انجام شد.'
         },
         200,
@@ -1265,13 +1449,14 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
       await recordLoginLog(supabase, createdUser.id, createdUser.username, 'user', 'success', null, clientIp, userAgent, deviceInfo);
 
+      const usage = await getUserUsageFromSupabase(supabase, createdUser, deviceFingerprint);
       const cookieHeader = `auth_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
 
       return jsonResponse(
         {
           success: true,
           token,
-          user: formatUserWithQuota(createdUser),
+          user: formatUserWithQuota(createdUser, usage),
           message: 'حساب کاربری شما با موفقیت ایجاد و فعال شد.'
         },
         200,
@@ -1291,15 +1476,16 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         user: null,
         guestUsage: {
           used: 0,
-          limit: 3,
-          remaining: 3,
+          limit: 1,
+          remaining: 1,
           canGenerate: true
         }
       });
     }
+    const usage = await getUserUsageFromSupabase(supabase, user, deviceFingerprint, user.eitaa_id);
     return jsonResponse({
       success: true,
-      user: formatUserWithQuota(user)
+      user: formatUserWithQuota(user, usage)
     });
   }
 
@@ -1373,12 +1559,13 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         30
       );
 
+      const usage = await getUserUsageFromSupabase(supabase, user, deviceFingerprint, eitaaId);
       const cookieHeader = `auth_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
       return jsonResponse(
         {
           success: true,
           token,
-          user: formatUserWithQuota(user),
+          user: formatUserWithQuota(user, usage),
           message: 'ورود با حساب ایتا موفق بود.'
         },
         200,
@@ -1397,22 +1584,27 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         success: true,
         usage: {
           isUnlimited: false,
-          dailyLimit: 3,
+          dailyLimit: 1,
           dailyUsed: 0,
-          dailyRemaining: 3,
-          canGenerate: true
+          dailyRemaining: 1,
+          canGenerate: true,
+          canGeneratePrimary: true,
+          nextResetAt: null
         }
       });
     }
-    const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa';
+    const usage = await getUserUsageFromSupabase(supabase, user, deviceFingerprint, user.eitaa_id);
     return jsonResponse({
       success: true,
       usage: {
-        isUnlimited,
-        dailyLimit: isUnlimited ? 999999 : 5,
-        dailyUsed: 0,
-        dailyRemaining: isUnlimited ? 999999 : 5,
-        canGenerate: true
+        isUnlimited: usage.isUnlimited,
+        dailyLimit: usage.dailyLimit,
+        dailyUsed: usage.dailyPrimaryUsed,
+        dailyRemaining: usage.remaining,
+        canGenerate: usage.canGeneratePrimary,
+        canGeneratePrimary: usage.canGeneratePrimary,
+        lastPrimaryUsageAt: usage.lastPrimaryUsageAt,
+        nextResetAt: usage.nextResetAt
       }
     });
   }
@@ -1451,6 +1643,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       let pendingSecurityEvents = 0;
       let totalGenerations = 0;
       let totalGenerateAgain = 0;
+      let todayGenerations = 0;
+      let todayPrimaryGenerations = 0;
+      let todayGenerateAgain = 0;
       let activeMasterPrompts = INITIAL_MASTER_PROMPTS.filter(p => p.active).length;
       let activeStyles = INITIAL_TYPOGRAPHY_STYLES.filter(s => s.active).length;
       let totalPrompts = INITIAL_MASTER_PROMPTS.length;
@@ -1461,8 +1656,13 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       let recentAudits: any[] = [];
 
       if (supabase) {
+        // Asynchronously prune temporary statistics logs older than 48h (outside 24h admin statistics window)
+        // This only touches generation_logs, NEVER touches users or subscriptions.
+        pruneOldStatisticsLogs(supabase).catch(() => {});
+
         try {
-          const [uRes, pRes, sRes, lRes, fRes, secRes, genRes, genAgainRes, actURes, actPRes, actSRes, recLogRes, recAudRes] = await Promise.all([
+          const window24hStartIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const [uRes, pRes, sRes, lRes, fRes, secRes, genRes, genAgainRes, actURes, actPRes, actSRes, recLogRes, recAudRes, gen24hRes, genAgain24hRes] = await Promise.all([
             supabase.from('users').select('*', { count: 'exact', head: true }),
             supabase.from('master_prompts').select('*', { count: 'exact', head: true }),
             supabase.from('typography_styles').select('*', { count: 'exact', head: true }),
@@ -1475,7 +1675,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             supabase.from('master_prompts').select('*', { count: 'exact', head: true }).eq('active', true),
             supabase.from('typography_styles').select('*', { count: 'exact', head: true }).eq('active', true),
             supabase.from('login_logs').select('*').order('timestamp', { ascending: false }).limit(8),
-            supabase.from('admin_audit_logs').select('*').order('timestamp', { ascending: false }).limit(8)
+            supabase.from('admin_audit_logs').select('*').order('timestamp', { ascending: false }).limit(8),
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', window24hStartIso),
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', window24hStartIso).eq('is_generate_again', true)
           ]);
 
           if (typeof uRes.count === 'number') totalUsers = Math.max(1, uRes.count);
@@ -1490,6 +1692,11 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           if (typeof sRes.count === 'number') totalStylesCount = sRes.count;
           if (typeof lRes.count === 'number') totalLogs = lRes.count;
           if (typeof fRes.count === 'number') totalFeedback = fRes.count;
+
+          const todayGenerations = typeof gen24hRes.count === 'number' ? gen24hRes.count : 0;
+          const todayGenerateAgain = typeof genAgain24hRes.count === 'number' ? genAgain24hRes.count : 0;
+          const todayPrimaryGenerations = Math.max(0, todayGenerations - todayGenerateAgain);
+
           if (recLogRes.data) {
             recentLogins = recLogRes.data.map(l => ({
               id: l.id,
@@ -1519,6 +1726,10 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           pendingSecurityEvents,
           totalGenerations,
           totalGenerateAgain,
+          todayGenerations,
+          todayPrimaryGenerations,
+          todayGenerateAgain,
+          todayActiveUsersCount: todayGenerations > 0 ? 1 : 0,
           activeMasterPrompts,
           activeStyles,
           totalPrompts,

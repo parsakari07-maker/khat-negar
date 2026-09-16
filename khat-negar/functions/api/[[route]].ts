@@ -54,6 +54,17 @@ export interface UserRecord {
 
 const SUPERADMIN_ID = '00000000-0000-0000-0000-000000000001';
 
+function getTodayMidnightIso(): string {
+  try {
+    const tehranDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date());
+    return new Date(`${tehranDateStr}T00:00:00+03:30`).toISOString();
+  } catch {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }
+}
+
 function formatUserWithQuota(user: any, usage?: any): any {
   if (!user) return null;
   const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa' || (user.subscription_status === 'active' && (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()));
@@ -116,7 +127,7 @@ async function getUserUsageFromSupabase(
   lastPrimaryUsageAt: string | null;
   nextResetAt: string | null;
 }> {
-  const isUnlimited = !!user && (
+  let isUnlimited = !!user && (
     user.is_unlimited === true ||
     user.role === 'admin' ||
     user.id === SUPERADMIN_ID ||
@@ -124,6 +135,27 @@ async function getUserUsageFromSupabase(
     (user.subscription_status === 'active' &&
       (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()))
   );
+
+  // Authoritative check on user_subscriptions table in Supabase
+  if (!isUnlimited && supabase && user?.id && user.id !== SUPERADMIN_ID) {
+    try {
+      const { data: sub } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+        isUnlimited = true;
+        user.is_unlimited = true;
+        user.subscription_status = 'active';
+        user.subscription_plan_name = sub.plan_name || 'نامحدود';
+      }
+    } catch {}
+  }
 
   const freeLimit = 1;
   const windowMs = 24 * 60 * 60 * 1000;
@@ -482,7 +514,7 @@ async function verifyAuthToken(token: string, secret: string): Promise<TokenPayl
   }
 }
 
-async function findUserById(supabase: SupabaseClient, env: Env, id: string): Promise<UserRecord | null> {
+async function findUserById(supabase: SupabaseClient | null, env: Env, id: string): Promise<UserRecord | null> {
   if (id === SUPERADMIN_ID) {
     return {
       id: SUPERADMIN_ID,
@@ -490,21 +522,47 @@ async function findUserById(supabase: SupabaseClient, env: Env, id: string): Pro
       role: 'admin',
       is_active: true,
       password_hash: '',
-      is_unlimited: true
+      is_unlimited: true,
+      subscription_status: 'active',
+      subscription_plan_name: 'مدیر ارشد'
     };
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-    if (!error && data) {
-      return data as UserRecord;
-    }
-  } catch {}
+      if (!error && data) {
+        const userRec = { ...(data as UserRecord) };
+        try {
+          const { data: sub } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = sub.plan_name || 'نامحدود';
+            userRec.subscription_activated_at = sub.activated_at || sub.created_at;
+            userRec.subscription_expires_at = sub.expires_at;
+            userRec.subscription_activated_by = sub.activated_by;
+            userRec.subscription_notes = sub.notes;
+          }
+        } catch {}
+
+        return userRec;
+      }
+    } catch {}
+  }
 
   return null;
 }
@@ -521,7 +579,29 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
         .maybeSingle();
 
       if (!error && data) {
-        return data as UserRecord;
+        const userRec = { ...(data as UserRecord) };
+        try {
+          const { data: sub } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', userRec.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = sub.plan_name || 'نامحدود';
+            userRec.subscription_activated_at = sub.activated_at || sub.created_at;
+            userRec.subscription_expires_at = sub.expires_at;
+            userRec.subscription_activated_by = sub.activated_by;
+            userRec.subscription_notes = sub.notes;
+          }
+        } catch {}
+
+        return userRec;
       }
     } catch {}
   }
@@ -533,7 +613,9 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
       role: 'admin',
       is_active: true,
       password_hash: bcrypt.hashSync('13101389', 10),
-      is_unlimited: true
+      is_unlimited: true,
+      subscription_status: 'active',
+      subscription_plan_name: 'مدیر ارشد'
     };
   }
 
@@ -1656,13 +1738,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       let recentAudits: any[] = [];
 
       if (supabase) {
-        // Asynchronously prune temporary statistics logs older than 48h (outside 24h admin statistics window)
-        // This only touches generation_logs, NEVER touches users or subscriptions.
-        pruneOldStatisticsLogs(supabase).catch(() => {});
-
         try {
-          const window24hStartIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-          const [uRes, pRes, sRes, lRes, fRes, secRes, genRes, genAgainRes, actURes, actPRes, actSRes, recLogRes, recAudRes, gen24hRes, genAgain24hRes] = await Promise.all([
+          const todayMidnightIso = getTodayMidnightIso();
+          const [uRes, pRes, sRes, lRes, fRes, secRes, genRes, genAgainRes, actURes, actPRes, actSRes, recLogRes, recAudRes, genTodayRes, genAgainTodayRes] = await Promise.all([
             supabase.from('users').select('*', { count: 'exact', head: true }),
             supabase.from('master_prompts').select('*', { count: 'exact', head: true }),
             supabase.from('typography_styles').select('*', { count: 'exact', head: true }),
@@ -1676,8 +1754,8 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             supabase.from('typography_styles').select('*', { count: 'exact', head: true }).eq('active', true),
             supabase.from('login_logs').select('*').order('timestamp', { ascending: false }).limit(8),
             supabase.from('admin_audit_logs').select('*').order('timestamp', { ascending: false }).limit(8),
-            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', window24hStartIso),
-            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', window24hStartIso).eq('is_generate_again', true)
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', todayMidnightIso),
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', todayMidnightIso).eq('is_generate_again', true)
           ]);
 
           if (typeof uRes.count === 'number') totalUsers = Math.max(1, uRes.count);
@@ -1693,9 +1771,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           if (typeof lRes.count === 'number') totalLogs = lRes.count;
           if (typeof fRes.count === 'number') totalFeedback = fRes.count;
 
-          const todayGenerations = typeof gen24hRes.count === 'number' ? gen24hRes.count : 0;
-          const todayGenerateAgain = typeof genAgain24hRes.count === 'number' ? genAgain24hRes.count : 0;
-          const todayPrimaryGenerations = Math.max(0, todayGenerations - todayGenerateAgain);
+          todayGenerations = typeof genTodayRes.count === 'number' ? genTodayRes.count : 0;
+          todayGenerateAgain = typeof genAgainTodayRes.count === 'number' ? genAgainTodayRes.count : 0;
+          todayPrimaryGenerations = Math.max(0, todayGenerations - todayGenerateAgain);
 
           if (recLogRes.data) {
             recentLogins = recLogRes.data.map(l => ({
@@ -1757,20 +1835,51 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
               .order('created_at', { ascending: false });
 
             if (!error && dbUsers) {
-              const { data: logsData } = await supabase.from('login_logs').select('user_id, username, ip_address, timestamp, success');
-              const { data: sessData } = await supabase.from('sessions').select('user_id, expires_at');
+              const todayMidnightIso = getTodayMidnightIso();
+              const [logsRes, sessRes, genLogsRes, subsRes] = await Promise.all([
+                supabase.from('login_logs').select('user_id, username, ip_address, timestamp, success'),
+                supabase.from('sessions').select('user_id, expires_at'),
+                supabase.from('generation_logs').select('user_id, username, eitaa_id, is_generate_again, timestamp').gte('timestamp', todayMidnightIso),
+                supabase.from('user_subscriptions').select('*').eq('status', 'active')
+              ]);
+
+              const logsData = logsRes.data || [];
+              const sessData = sessRes.data || [];
+              const todayGenLogs = genLogsRes.data || [];
+              const subsData = subsRes.data || [];
               const now = Date.now();
 
               users = dbUsers.map(u => {
-                const userLogs = (logsData || []).filter(l => l.user_id === u.id || (l.username && l.username.toLowerCase() === u.username.toLowerCase()));
+                const userLogs = logsData.filter(l => l.user_id === u.id || (l.username && l.username.toLowerCase() === u.username.toLowerCase()));
                 const uniqueIps = Array.from(new Set(userLogs.map(l => l.ip_address).filter(Boolean)));
                 const sortedLogs = [...userLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
                 const lastLogin = sortedLogs.find(l => l.success !== false)?.timestamp || sortedLogs[0]?.timestamp || null;
-                const activeSessions = (sessData || []).filter(s => s.user_id === u.id && new Date(s.expires_at).getTime() > now).length;
+                const activeSessions = sessData.filter(s => s.user_id === u.id && new Date(s.expires_at).getTime() > now).length;
+
+                const userTodayLogs = todayGenLogs.filter(l => 
+                  (l.user_id && l.user_id === u.id) ||
+                  (l.username && l.username.toLowerCase() === u.username.toLowerCase()) ||
+                  (u.eitaa_id && l.eitaa_id === u.eitaa_id)
+                );
+                const todayPrimary = userTodayLogs.filter(l => !l.is_generate_again).length;
+                const todayRegenerations = userTodayLogs.filter(l => !!l.is_generate_again).length;
+
+                const userSub = subsData.find(s => s.user_id === u.id && (!s.expires_at || new Date(s.expires_at).getTime() > now));
+                if (userSub) {
+                  u.is_unlimited = true;
+                  u.subscription_status = 'active';
+                  u.subscription_plan_name = userSub.plan_name || 'نامحدود';
+                  u.subscription_activated_at = userSub.activated_at || userSub.created_at;
+                  u.subscription_expires_at = userSub.expires_at;
+                  u.subscription_activated_by = userSub.activated_by;
+                  u.subscription_notes = userSub.notes;
+                }
 
                 const formatted = formatUserWithQuota(u);
                 return {
                   ...formatted,
+                  today_primary_count: todayPrimary,
+                  today_generate_again_count: todayRegenerations,
                   password_hash: '',
                   ip_count: uniqueIps.length,
                   last_login_at: lastLogin,
@@ -1963,21 +2072,41 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           }
 
           if (data) {
-            updatedUser = { ...data, is_unlimited: isUnlimitedFlag };
+            updatedUser = {
+              ...data,
+              is_unlimited: isUnlimitedFlag,
+              subscription_status: finalStatus,
+              subscription_plan_name: finalPlanName,
+              subscription_notes: finalNotes,
+              subscription_activated_by: authedUser.username,
+              subscription_activated_at: isUnlimitedFlag ? now : null,
+              subscription_expires_at: expiresAt
+            };
           }
 
           try {
-            await supabase.from('user_subscriptions').insert({
-              id: crypto.randomUUID(),
-              user_id: targetUserId,
-              plan_name: finalPlanName,
-              status: finalStatus,
-              activated_by: authedUser.username,
-              notes: finalNotes,
-              expires_at: expiresAt,
-              created_at: now
-            });
-          } catch {}
+            // Cancel old active subscriptions to maintain single authoritative active state
+            await supabase
+              .from('user_subscriptions')
+              .update({ status: 'cancelled' })
+              .eq('user_id', targetUserId)
+              .eq('status', 'active');
+
+            if (isUnlimitedFlag) {
+              await supabase.from('user_subscriptions').insert({
+                id: crypto.randomUUID(),
+                user_id: targetUserId,
+                plan_name: finalPlanName,
+                status: 'active',
+                activated_by: authedUser.username,
+                notes: finalNotes,
+                expires_at: expiresAt,
+                created_at: now
+              });
+            }
+          } catch (e) {
+            console.error('Error synchronizing user_subscriptions:', e);
+          }
         }
 
         const actionText = isUnlimitedFlag ? 'فعال‌سازی اشتراک نامحدود' : 'لغو اشتراک نامحدود';

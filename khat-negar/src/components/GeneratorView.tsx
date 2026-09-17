@@ -20,10 +20,10 @@ import {
   CheckCircle2,
   Flame,
   Palette,
-  Crown,
   AlertTriangle,
-  Zap,
-  ExternalLink
+  ExternalLink,
+  Crown,
+  Zap
 } from 'lucide-react';
 import { ColorControl } from './ColorControl.js';
 import { GenerationAnimation } from './GenerationAnimation.js';
@@ -72,20 +72,9 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
   const generatorSubmitLoading = settings.generator_submit_loading_fa || 'در حال پردازش و نگارش پرامپت...';
 
   // Subscription, Daily Limit & Eitaa Integration Dynamic Texts
-  const badgeUnlimitedText = settings.daily_limit_badge_unlimited_fa || 'وضعیت حساب: اشتراک نامحدود فعال ✨';
-  const badgeFreeTemplate = settings.daily_limit_badge_free_fa || 'سهمیه رایگان امروز: {remaining} از {limit} پرامپت اصلی باقی‌مانده';
-  const freeSubtext = settings.daily_limit_free_subtext_fa || 'امکان «تولید دوباره» پرامپت‌های قبلی کاملاً نامحدود و رایگان است ✨';
-  const limitExceededTitle = settings.daily_limit_exceeded_title_fa || 'سقف ۱ پرامپت رایگان امروز شما استفاده شده است';
-  const limitExceededDesc = settings.daily_limit_exceeded_desc_fa || '💡 نکته مهم: امکان «تولید دوباره» برای پرامپت‌های قبلی شما همچنان کاملاً نامحدود و رایگان است!';
   const upgradePromptText = settings.daily_limit_upgrade_prompt_fa || 'برای ارتقا به اشتراک نامحدود و حذف سقف روزانه، به کانال ایتا مراجعه فرمایید:';
   const eitaaBtnText = settings.daily_limit_eitaa_btn_text_fa || 'کانال ایتا خط‌نگار';
   const eitaaUrl = settings.eitaa_channel_url || 'https://eitaa.com/khatnegarTypographicCraft';
-
-  const formatFreeBadge = (remaining: number, limit: number) => {
-    return badgeFreeTemplate
-      .replace('{remaining}', remaining.toString())
-      .replace('{limit}', limit.toString());
-  };
 
   // Options loaded from server with robust initial defaults
   const [styles, setStyles] = useState<TypographyStyle[]>(INITIAL_TYPOGRAPHY_STYLES);
@@ -195,7 +184,25 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
   }, []);
 
   const { user, refreshUser } = useAuth();
-  const isQuotaDepleted = !!user && !user.is_unlimited && user.daily_primary_remaining === 0;
+  const dailyLimitNum = user?.is_unlimited
+    ? 999999
+    : (settings.daily_free_limit && Number(settings.daily_free_limit) > 0 ? Number(settings.daily_free_limit) : (user?.daily_primary_limit || 1));
+  const dailyUsedNum = user?.daily_primary_used ?? (user?.daily_primary_limit !== undefined && user?.daily_primary_remaining !== undefined ? Math.max(0, user.daily_primary_limit - user.daily_primary_remaining) : 0);
+  const remainingNum = user?.is_unlimited ? 999999 : Math.max(0, dailyLimitNum - dailyUsedNum);
+  const isQuotaDepleted = !!user && !user.is_unlimited && remainingNum === 0;
+
+  const rawExceeded = settings.daily_limit_exceeded_title_fa || 'سقف {limit} پرامپت رایگان امروز شما استفاده شده است';
+  const limitExceededTitle = rawExceeded.includes('{limit}')
+    ? rawExceeded.replace(/{limit}/g, String(dailyLimitNum))
+    : rawExceeded.replace(/۱\s*پرامپت/g, `${dailyLimitNum} پرامپت`);
+
+  const rawFreeBadge = settings.daily_limit_badge_free_fa || 'سهمیه رایگان امروز: {remaining} از {limit} پرامپت اصلی باقی‌مانده';
+  const freeBadgeText = rawFreeBadge
+    .replace(/{remaining}/g, String(remainingNum))
+    .replace(/{limit}/g, String(dailyLimitNum));
+
+  const unlimitedBadgeText = settings.daily_limit_badge_unlimited_fa || 'وضعیت حساب: اشتراک نامحدود فعال ✨';
+  const freeSubtext = settings.daily_limit_free_subtext_fa || '💡 امکان «تولید دوباره» برای پرامپت‌های قبلی شما کاملاً نامحدود و رایگان است';
 
   const handleGenerate = async () => {
     if (!isLoggedIn) {
@@ -209,7 +216,7 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
     }
 
     // Client-side quick check for daily limit
-    if (user && !user.is_unlimited && user.daily_primary_remaining === 0) {
+    if (user && !user.is_unlimited && remainingNum === 0) {
       setErrorMessage(limitExceededTitle);
       return;
     }
@@ -396,6 +403,107 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
         transition={{ duration: 0.45 }}
         className="bg-[var(--bg-surface)] rounded-3xl border border-[var(--border-color)] shadow-xl p-5 md:p-8 space-y-8 backdrop-blur-sm"
       >
+        {/* Quota & Subscription Status Banner */}
+        {user ? (
+          user.is_unlimited || user.role === 'admin' ? (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Crown className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300 block">
+                    {unlimitedBadgeText}
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)] block">
+                    دسترسی شما به تولید انواع پرامپت‌ها و مدل‌های هوش مصنوعی کاملاً نامحدود است.
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : isQuotaDepleted ? (
+            <div className="p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-sm font-black text-amber-800 dark:text-amber-200 block">
+                    {limitExceededTitle}
+                  </span>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
+                    {settings.daily_limit_exceeded_desc_fa || 'امکان «تولید دوباره» برای پرامپت‌های قبلی شما همچنان کاملاً نامحدود و رایگان است! جهت تولید پرامپت جدید، اشتراک خود را ارتقا دهید.'}
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href={eitaaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-md shadow-amber-500/20 transition cursor-pointer"
+              >
+                <Crown className="w-4 h-4" />
+                <span>{eitaaBtnText || 'ارتقا در کانال ایتا'}</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#F55951]/10 text-[#F55951] flex items-center justify-center shrink-0">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-[var(--text-primary)] block">
+                    {freeBadgeText}
+                  </span>
+                  {freeSubtext && (
+                    <span className="text-[11px] text-[var(--text-muted)] block">
+                      {freeSubtext}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <a
+                href={eitaaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 text-xs font-bold transition cursor-pointer border border-amber-500/20"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-500" />
+                <span>{eitaaBtnText || 'ارتقا به اشتراک نامحدود'}</span>
+                <ExternalLink className="w-3 h-3 opacity-60" />
+              </a>
+            </div>
+          )
+        ) : (
+          <div className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#F55951]/10 text-[#F55951] flex items-center justify-center shrink-0">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-[var(--text-primary)] block">
+                  سهمیه روزانه: {dailyLimitNum} پرامپت اصلی رایگان در هر روز
+                </span>
+                <span className="text-[11px] text-[var(--text-muted)] block">
+                  برای استفاده از سهمیه رایگان روزانه، وارد حساب کاربری خود شوید یا ثبت‌نام کنید.
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpenLogin}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#F55951] hover:bg-[#E04840] text-white text-xs font-bold transition cursor-pointer shadow-xs"
+            >
+              <span>ورود به حساب</span>
+            </button>
+          </div>
+        )}
+
         {/* =========================================
             SECTION 1: EXACT TEXT (TITLE)
         ========================================== */}
@@ -808,65 +916,6 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
             <Info className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </motion.div>
-        )}
-
-        {/* =========================================
-            USER QUOTA & SUBSCRIPTION STATUS (ORIGINAL LOCATION - COMPACT & ELEGANT)
-        ========================================== */}
-        {user && (
-          <div className="w-full">
-            {user.is_unlimited ? (
-              <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300">
-                <div className="flex items-center gap-2 font-bold">
-                  <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span>{badgeUnlimitedText}</span>
-                </div>
-                <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 font-medium">
-                  بدون سقف روزانه ✨
-                </span>
-              </div>
-            ) : user.daily_primary_remaining === 0 ? (
-              <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-[var(--text-secondary)] space-y-2"
-              >
-                <div className="flex items-center justify-between font-bold text-amber-800 dark:text-amber-300">
-                  <div className="flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>{limitExceededTitle}</span>
-                  </div>
-                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 font-mono">
-                    {`۰ از ${user.daily_primary_limit || 1}`}
-                  </span>
-                </div>
-                <div className="text-[11px] leading-relaxed text-[var(--text-muted)] flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-amber-500/15">
-                  <span>{limitExceededDesc}</span>
-                  <a
-                    href={eitaaUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
-                  >
-                    <span>{eitaaBtnText}</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </motion.div>
-            ) : (
-              <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs text-[var(--text-secondary)]">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-3.5 h-3.5 text-[#F55951] shrink-0" />
-                  <span className="font-medium">
-                    {formatFreeBadge(user.daily_primary_remaining, user.daily_primary_limit || 1)}
-                  </span>
-                </div>
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                  {freeSubtext}
-                </span>
-              </div>
-            )}
-          </div>
         )}
 
         {/* PRIMARY GENERATE BUTTON */}

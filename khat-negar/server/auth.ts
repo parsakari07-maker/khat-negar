@@ -29,16 +29,53 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 export function getClientIp(req: Request): string {
+  // Check headers commonly sent by CDNs, Cloudflare, reverse proxies and test suites
+  const cfConnectingIp = req.headers['cf-connecting-ip'];
+  if (typeof cfConnectingIp === 'string' && cfConnectingIp.trim()) {
+    return normalizeIp(cfConnectingIp.trim());
+  }
+
+  const xRealIp = req.headers['x-real-ip'];
+  if (typeof xRealIp === 'string' && xRealIp.trim()) {
+    return normalizeIp(xRealIp.trim());
+  }
+
+  const trueClientIp = req.headers['true-client-ip'];
+  if (typeof trueClientIp === 'string' && trueClientIp.trim()) {
+    return normalizeIp(trueClientIp.trim());
+  }
+
+  const xClientIp = req.headers['x-client-ip'];
+  if (typeof xClientIp === 'string' && xClientIp.trim()) {
+    return normalizeIp(xClientIp.trim());
+  }
+
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string' && forwarded.trim()) {
     const firstIp = forwarded.split(',')[0].trim();
-    if (firstIp) return firstIp;
+    if (firstIp) return normalizeIp(firstIp);
   }
   if (Array.isArray(forwarded) && forwarded.length > 0) {
     const firstIp = forwarded[0].trim();
-    if (firstIp) return firstIp;
+    if (firstIp) return normalizeIp(firstIp);
   }
-  return req.ip || req.socket?.remoteAddress || '127.0.0.1';
+
+  const fallback = req.ip || req.socket?.remoteAddress || '127.0.0.1';
+  return normalizeIp(fallback);
+}
+
+function normalizeIp(ip: string): string {
+  if (!ip) return '127.0.0.1';
+  let cleaned = ip.trim();
+  // Strip IPv4-mapped IPv6 prefix (e.g. ::ffff:192.168.1.1)
+  if (cleaned.startsWith('::ffff:')) {
+    cleaned = cleaned.substring(7);
+  }
+  // Strip port if present in IPv4 (e.g. 192.168.1.1:54321)
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/.test(cleaned)) {
+    cleaned = cleaned.split(':')[0];
+  }
+  return cleaned || '127.0.0.1';
 }
 
 export function parseUserAgent(ua: string): string {
@@ -63,6 +100,9 @@ export function parseUserAgent(ua: string): string {
 export function rateLimit(limit: number, windowMs: number, keyPrefix = 'rl') {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const ip = getClientIp(req);
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
+      return next();
+    }
     const key = `${keyPrefix}:${ip}`;
     const now = Date.now();
     const bucket = rateLimitMap.get(key);

@@ -54,9 +54,30 @@ export interface UserRecord {
 
 const SUPERADMIN_ID = '00000000-0000-0000-0000-000000000001';
 
+function getTodayMidnightIso(): string {
+  try {
+    const tehranDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date());
+    return new Date(`${tehranDateStr}T00:00:00.000+03:30`).toISOString();
+  } catch {
+    const now = new Date();
+    const tehranOffsetMs = (3 * 60 + 30) * 60 * 1000;
+    const tehranNow = new Date(now.getTime() + tehranOffsetMs);
+    const year = tehranNow.getUTCFullYear();
+    const month = String(tehranNow.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(tehranNow.getUTCDate()).padStart(2, '0');
+    return new Date(`${year}-${month}-${day}T00:00:00.000+03:30`).toISOString();
+  }
+}
+
+function getTomorrowMidnightIso(): string {
+  const startMs = new Date(getTodayMidnightIso()).getTime();
+  return new Date(startMs + 24 * 60 * 60 * 1000).toISOString();
+}
+
 function formatUserWithQuota(user: any, usage?: any): any {
   if (!user) return null;
-  const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa' || (user.subscription_status === 'active' && (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()));
+  const isExpired = !!user.subscription_expires_at && new Date(user.subscription_expires_at).getTime() <= Date.now();
+  const isUnlimited = user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa' || (!isExpired && (user.is_unlimited === true || user.subscription_status === 'active'));
   const planName = user.subscription_plan_name || (isUnlimited ? 'نامحدود' : '');
   const status = isUnlimited ? 'active' : (user.subscription_status || 'free');
 
@@ -116,19 +137,42 @@ async function getUserUsageFromSupabase(
   lastPrimaryUsageAt: string | null;
   nextResetAt: string | null;
 }> {
-  const isUnlimited = !!user && (
-    user.is_unlimited === true ||
+  const isExpired = !!user?.subscription_expires_at && new Date(user.subscription_expires_at).getTime() <= Date.now();
+  let isUnlimited = !!user && (
     user.role === 'admin' ||
     user.id === SUPERADMIN_ID ||
     user.username === 'parsa' ||
-    (user.subscription_status === 'active' &&
-      (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()))
+    (!isExpired && (
+      user.is_unlimited === true ||
+      user.subscription_status === 'active'
+    ))
   );
 
+  // Authoritative check on user_subscriptions table in Supabase
+  if (!isUnlimited && !isExpired && supabase && user?.id && user.id !== SUPERADMIN_ID) {
+    try {
+      const { data: sub } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+        isUnlimited = true;
+        user.is_unlimited = true;
+        user.subscription_status = 'active';
+        user.subscription_plan_name = sub.plan_name || 'نامحدود';
+      }
+    } catch {}
+  }
+
   const freeLimit = 1;
-  const windowMs = 24 * 60 * 60 * 1000;
-  const nowMs = Date.now();
-  const windowStartIso = new Date(nowMs - windowMs).toISOString();
+  const todayStartIso = getTodayMidnightIso();
+  const todayStartMs = new Date(todayStartIso).getTime();
+  const nextResetIso = getTomorrowMidnightIso();
 
   if (isUnlimited) {
     return {
@@ -160,7 +204,7 @@ async function getUserUsageFromSupabase(
         const { data } = await supabase
           .from('generation_logs')
           .select('id, is_generate_again, timestamp')
-          .gte('timestamp', windowStartIso)
+          .gte('timestamp', todayStartIso)
           .or(orFilters.join(','))
           .order('timestamp', { ascending: false });
 
@@ -175,18 +219,16 @@ async function getUserUsageFromSupabase(
   }
 
   const userLastPrimaryAt = user?.last_primary_generation_at ? new Date(user.last_primary_generation_at).getTime() : 0;
-  const userUsedWithin24h = userLastPrimaryAt > (nowMs - windowMs);
+  const userUsedToday = userLastPrimaryAt >= todayStartMs;
 
-  const dailyPrimaryUsed = (primaryLogs.length > 0 || userUsedWithin24h) ? 1 : 0;
+  const dailyPrimaryUsed = (primaryLogs.length > 0 || userUsedToday) ? 1 : 0;
   const dailyGenerateAgainUsed = againLogs.length;
   const remaining = Math.max(0, freeLimit - dailyPrimaryUsed);
   const canGeneratePrimary = dailyPrimaryUsed < freeLimit;
 
   const latestLogTimestamp = primaryLogs[0] ? new Date(primaryLogs[0].timestamp).getTime() : userLastPrimaryAt;
   const lastPrimaryUsageAt = latestLogTimestamp > 0 ? new Date(latestLogTimestamp).toISOString() : null;
-  const nextResetAt = (!canGeneratePrimary && latestLogTimestamp > 0)
-    ? new Date(latestLogTimestamp + windowMs).toISOString()
-    : null;
+  const nextResetAt = !canGeneratePrimary ? nextResetIso : null;
 
   return {
     dailyPrimaryUsed,
@@ -482,7 +524,7 @@ async function verifyAuthToken(token: string, secret: string): Promise<TokenPayl
   }
 }
 
-async function findUserById(supabase: SupabaseClient, env: Env, id: string): Promise<UserRecord | null> {
+async function findUserById(supabase: SupabaseClient | null, env: Env, id: string): Promise<UserRecord | null> {
   if (id === SUPERADMIN_ID) {
     return {
       id: SUPERADMIN_ID,
@@ -490,21 +532,64 @@ async function findUserById(supabase: SupabaseClient, env: Env, id: string): Pro
       role: 'admin',
       is_active: true,
       password_hash: '',
-      is_unlimited: true
+      is_unlimited: true,
+      subscription_status: 'active',
+      subscription_plan_name: 'مدیر ارشد'
     };
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-    if (!error && data) {
-      return data as UserRecord;
-    }
-  } catch {}
+      if (!error && data) {
+        const userRec = { ...(data as UserRecord) };
+        const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
+        const baseUnlimited = !isExp && (
+          userRec.is_unlimited === true ||
+          (userRec.is_unlimited as any) === 'true' ||
+          (userRec.is_unlimited as any) === 1 ||
+          userRec.subscription_status === 'active'
+        );
+        userRec.is_unlimited = baseUnlimited;
+        if (baseUnlimited) {
+          userRec.subscription_status = 'active';
+        }
+
+        try {
+          const { data: sub } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = sub.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
+            userRec.subscription_expires_at = sub.expires_at;
+            userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = sub.notes || userRec.subscription_notes;
+          } else if (!baseUnlimited) {
+            userRec.is_unlimited = false;
+            if (userRec.subscription_status !== 'expired') {
+              userRec.subscription_status = 'free';
+            }
+          }
+        } catch {}
+
+        return userRec;
+      }
+    } catch {}
+  }
 
   return null;
 }
@@ -521,7 +606,46 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
         .maybeSingle();
 
       if (!error && data) {
-        return data as UserRecord;
+        const userRec = { ...(data as UserRecord) };
+        const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
+        const baseUnlimited = !isExp && (
+          userRec.is_unlimited === true ||
+          (userRec.is_unlimited as any) === 'true' ||
+          (userRec.is_unlimited as any) === 1 ||
+          userRec.subscription_status === 'active'
+        );
+        userRec.is_unlimited = baseUnlimited;
+        if (baseUnlimited) {
+          userRec.subscription_status = 'active';
+        }
+
+        try {
+          const { data: sub } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', userRec.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = sub.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
+            userRec.subscription_expires_at = sub.expires_at;
+            userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = sub.notes || userRec.subscription_notes;
+          } else if (!baseUnlimited) {
+            userRec.is_unlimited = false;
+            if (userRec.subscription_status !== 'expired') {
+              userRec.subscription_status = 'free';
+            }
+          }
+        } catch {}
+
+        return userRec;
       }
     } catch {}
   }
@@ -533,7 +657,9 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
       role: 'admin',
       is_active: true,
       password_hash: bcrypt.hashSync('13101389', 10),
-      is_unlimited: true
+      is_unlimited: true,
+      subscription_status: 'active',
+      subscription_plan_name: 'مدیر ارشد'
     };
   }
 
@@ -1658,13 +1784,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       let recentAudits: any[] = [];
 
       if (supabase) {
-        // Asynchronously prune temporary statistics logs older than 48h (outside 24h admin statistics window)
-        // This only touches generation_logs, NEVER touches users or subscriptions.
-        pruneOldStatisticsLogs(supabase).catch(() => {});
-
         try {
-          const window24hStartIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-          const [uRes, pRes, sRes, lRes, fRes, secRes, genRes, genAgainRes, actURes, actPRes, actSRes, recLogRes, recAudRes, gen24hRes, genAgain24hRes] = await Promise.all([
+          const todayMidnightIso = getTodayMidnightIso();
+          const [uRes, pRes, sRes, lRes, fRes, secRes, genRes, genAgainRes, actURes, actPRes, actSRes, recLogRes, recAudRes, genTodayRes, genAgainTodayRes] = await Promise.all([
             supabase.from('users').select('*', { count: 'exact', head: true }),
             supabase.from('master_prompts').select('*', { count: 'exact', head: true }),
             supabase.from('typography_styles').select('*', { count: 'exact', head: true }),
@@ -1678,8 +1800,8 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             supabase.from('typography_styles').select('*', { count: 'exact', head: true }).eq('active', true),
             supabase.from('login_logs').select('*').order('timestamp', { ascending: false }).limit(8),
             supabase.from('admin_audit_logs').select('*').order('timestamp', { ascending: false }).limit(8),
-            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', window24hStartIso),
-            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', window24hStartIso).eq('is_generate_again', true)
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', todayMidnightIso),
+            supabase.from('generation_logs').select('*', { count: 'exact', head: true }).gte('timestamp', todayMidnightIso).eq('is_generate_again', true)
           ]);
 
           if (typeof uRes.count === 'number') totalUsers = Math.max(1, uRes.count);
@@ -1695,9 +1817,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           if (typeof lRes.count === 'number') totalLogs = lRes.count;
           if (typeof fRes.count === 'number') totalFeedback = fRes.count;
 
-          const todayGenerations = typeof gen24hRes.count === 'number' ? gen24hRes.count : 0;
-          const todayGenerateAgain = typeof genAgain24hRes.count === 'number' ? genAgain24hRes.count : 0;
-          const todayPrimaryGenerations = Math.max(0, todayGenerations - todayGenerateAgain);
+          todayGenerations = typeof genTodayRes.count === 'number' ? genTodayRes.count : 0;
+          todayGenerateAgain = typeof genAgainTodayRes.count === 'number' ? genAgainTodayRes.count : 0;
+          todayPrimaryGenerations = Math.max(0, todayGenerations - todayGenerateAgain);
 
           if (recLogRes.data) {
             recentLogins = recLogRes.data.map(l => ({
@@ -1714,32 +1836,6 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             }));
           }
           if (recAudRes.data) recentAudits = recAudRes.data;
-
-          return jsonResponse({
-            success: true,
-            stats: {
-              totalUsers,
-              activeUsers,
-              inactiveUsers,
-              pendingSecurityEvents,
-              totalGenerations,
-              totalGenerateAgain,
-              todayGenerations,
-              todayPrimaryGenerations,
-              todayGenerateAgain,
-              todayActiveUsersCount: todayGenerations > 0 ? 1 : 0,
-              activeMasterPrompts,
-              activeStyles,
-              totalPrompts,
-              totalStyles: totalStylesCount,
-              totalLogs,
-              totalFeedback,
-              recentLogins,
-              recentAudits,
-              systemStatus: 'online',
-              dbConnected: !!supabase
-            }
-          });
         } catch (e) {
           console.error('Error fetching stats from Supabase:', e);
         }
@@ -1754,6 +1850,10 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           pendingSecurityEvents,
           totalGenerations,
           totalGenerateAgain,
+          todayGenerations,
+          todayPrimaryGenerations,
+          todayGenerateAgain,
+          todayActiveUsersCount: todayGenerations > 0 ? 1 : 0,
           activeMasterPrompts,
           activeStyles,
           totalPrompts,
@@ -1781,20 +1881,64 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
               .order('created_at', { ascending: false });
 
             if (!error && dbUsers) {
-              const { data: logsData } = await supabase.from('login_logs').select('user_id, username, ip_address, timestamp, success');
-              const { data: sessData } = await supabase.from('sessions').select('user_id, expires_at');
+              const todayMidnightIso = getTodayMidnightIso();
+              const [logsRes, sessRes, genLogsRes, subsRes] = await Promise.all([
+                supabase.from('login_logs').select('user_id, username, ip_address, timestamp, success'),
+                supabase.from('sessions').select('user_id, expires_at'),
+                supabase.from('generation_logs').select('user_id, username, eitaa_id, is_generate_again, timestamp').gte('timestamp', todayMidnightIso),
+                supabase.from('user_subscriptions').select('*').eq('status', 'active')
+              ]);
+
+              const logsData = logsRes.data || [];
+              const sessData = sessRes.data || [];
+              const todayGenLogs = genLogsRes.data || [];
+              const subsData = subsRes.data || [];
               const now = Date.now();
 
               users = dbUsers.map(u => {
-                const userLogs = (logsData || []).filter(l => l.user_id === u.id || (l.username && l.username.toLowerCase() === u.username.toLowerCase()));
+                const userLogs = logsData.filter(l => l.user_id === u.id || (l.username && l.username.toLowerCase() === u.username.toLowerCase()));
                 const uniqueIps = Array.from(new Set(userLogs.map(l => l.ip_address).filter(Boolean)));
                 const sortedLogs = [...userLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
                 const lastLogin = sortedLogs.find(l => l.success !== false)?.timestamp || sortedLogs[0]?.timestamp || null;
-                const activeSessions = (sessData || []).filter(s => s.user_id === u.id && new Date(s.expires_at).getTime() > now).length;
+                const activeSessions = sessData.filter(s => s.user_id === u.id && new Date(s.expires_at).getTime() > now).length;
+
+                const userTodayLogs = todayGenLogs.filter(l => 
+                  (l.user_id && l.user_id === u.id) ||
+                  (l.username && l.username.toLowerCase() === u.username.toLowerCase()) ||
+                  (u.eitaa_id && l.eitaa_id === u.eitaa_id)
+                );
+                const primaryToday = userTodayLogs.filter(l => !l.is_generate_again).length;
+                const regenerationsToday = userTodayLogs.filter(l => !!l.is_generate_again).length;
+
+                const isExp = !!u.subscription_expires_at && new Date(u.subscription_expires_at).getTime() <= now;
+                const userSub = subsData.find(s => s.user_id === u.id && (!s.expires_at || new Date(s.expires_at).getTime() > now));
+                const isUnlimited = u.role === 'admin' || u.id === SUPERADMIN_ID || u.username === 'parsa' || (!isExp && (
+                  u.is_unlimited === true ||
+                  (u.is_unlimited as any) === 'true' ||
+                  (u.is_unlimited as any) === 1 ||
+                  u.subscription_status === 'active' ||
+                  !!userSub
+                ));
+
+                u.is_unlimited = isUnlimited;
+                if (isUnlimited) {
+                  u.subscription_status = 'active';
+                  u.subscription_plan_name = userSub?.plan_name || u.subscription_plan_name || 'نامحدود';
+                  if (userSub) {
+                    u.subscription_activated_at = userSub.activated_at || userSub.created_at || u.subscription_activated_at;
+                    u.subscription_expires_at = userSub.expires_at;
+                    u.subscription_activated_by = userSub.activated_by || u.subscription_activated_by;
+                    u.subscription_notes = userSub.notes || u.subscription_notes;
+                  }
+                } else if (u.subscription_status !== 'expired') {
+                  u.subscription_status = 'free';
+                }
 
                 const formatted = formatUserWithQuota(u);
                 return {
                   ...formatted,
+                  today_primary_count: primaryToday,
+                  today_generate_again_count: regenerationsToday,
                   password_hash: '',
                   ip_count: uniqueIps.length,
                   last_login_at: lastLogin,
@@ -1932,7 +2076,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             ? false
             : (typeof is_unlimited === 'boolean' ? is_unlimited : status === 'active'));
 
-        const finalStatus = isUnlimitedFlag ? 'active' : 'standard';
+        const finalStatus = isUnlimitedFlag ? 'active' : 'free';
         const finalPlanName = plan_name || (isUnlimitedFlag ? 'نامحدود' : '');
         const finalNotes = admin_notes || notes || '';
         const now = new Date().toISOString();
@@ -1973,36 +2117,88 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             .select('*')
             .maybeSingle();
 
-          if (error && (error.message.includes('column') || error.code === '42703')) {
-            const fallbackPayload: any = { updated_at: now };
-            const { data: fbData } = await supabase
+          if (error && (error.message?.includes('column') || error.code === '42703')) {
+            console.warn('Supabase users table missing some subscription metadata columns, retrying with core fields:', error.message);
+            const corePayload: any = {
+              is_unlimited: isUnlimitedFlag,
+              subscription_status: finalStatus,
+              subscription_plan_name: finalPlanName,
+              updated_at: now
+            };
+            const res2 = await supabase
               .from('users')
-              .update(fallbackPayload)
+              .update(corePayload)
               .eq('id', targetUserId)
               .select('*')
               .maybeSingle();
 
-            if (fbData) {
-              data = { ...fbData, ...updatePayload };
+            data = res2.data;
+            error = res2.error;
+
+            if (error && (error.message?.includes('column') || error.code === '42703')) {
+              const minPayload = {
+                is_unlimited: isUnlimitedFlag,
+                subscription_status: finalStatus,
+                updated_at: now
+              };
+              const res3 = await supabase
+                .from('users')
+                .update(minPayload)
+                .eq('id', targetUserId)
+                .select('*')
+                .maybeSingle();
+
+              data = res3.data;
             }
           }
 
-          if (data) {
-            updatedUser = { ...data, is_unlimited: isUnlimitedFlag };
+          try {
+            // Cancel old active subscriptions to maintain single authoritative active state
+            await supabase
+              .from('user_subscriptions')
+              .update({ status: 'cancelled' })
+              .eq('user_id', targetUserId)
+              .eq('status', 'active');
+
+            if (isUnlimitedFlag) {
+              const { error: insertErr } = await supabase.from('user_subscriptions').insert({
+                id: crypto.randomUUID(),
+                user_id: targetUserId,
+                plan_name: finalPlanName,
+                status: 'active',
+                activated_by: authedUser.username,
+                notes: finalNotes,
+                expires_at: expiresAt,
+                created_at: now
+              });
+              if (insertErr && (insertErr.message?.includes('column') || insertErr.code === '42703')) {
+                await supabase.from('user_subscriptions').insert({
+                  id: crypto.randomUUID(),
+                  user_id: targetUserId,
+                  plan_name: finalPlanName,
+                  status: 'active',
+                  created_at: now
+                });
+              }
+            }
+          } catch (e) {
+            console.error('Error synchronizing user_subscriptions:', e);
           }
 
-          try {
-            await supabase.from('user_subscriptions').insert({
-              id: crypto.randomUUID(),
-              user_id: targetUserId,
-              plan_name: finalPlanName,
-              status: finalStatus,
-              activated_by: authedUser.username,
-              notes: finalNotes,
-              expires_at: expiresAt,
-              created_at: now
+          // Authoritative verification directly from database
+          const verifiedUser = await findUserById(supabase, env, targetUserId);
+          if (!verifiedUser || Boolean(verifiedUser.is_unlimited) !== isUnlimitedFlag) {
+            console.error('Database verification failed after updating subscription:', {
+              targetUserId,
+              isUnlimitedFlag,
+              verifiedUser
             });
-          } catch {}
+            return jsonResponse({
+              success: false,
+              error: 'خطا در ثبت و اعتبارسنجی تغییرات در پایگاه داده. وضعیت اشتراک کاربر در پایگاه داده اعمال نشد.'
+            }, 500);
+          }
+          updatedUser = verifiedUser;
         }
 
         const actionText = isUnlimitedFlag ? 'فعال‌سازی اشتراک نامحدود' : 'لغو اشتراک نامحدود';
@@ -2016,9 +2212,12 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           clientIp
         );
 
+        const finalUsage = await getUserUsageFromSupabase(supabase, updatedUser);
+
         return jsonResponse({
           success: true,
-          user: formatUserWithQuota(updatedUser),
+          user: formatUserWithQuota(updatedUser, finalUsage),
+          is_unlimited: isUnlimitedFlag,
           message: isUnlimitedFlag
             ? `اشتراک نامحدود کاربر «${targetUsername}» با موفقیت فعال گردید.`
             : `اشتراک کاربر «${targetUsername}» به وضعیت عادی تغییر یافت.`
@@ -2873,7 +3072,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             totalDeleted += deletedCounts.security_events;
           }
           if (target === 'all' || target === 'generation_logs') {
-            const { count } = await supabase.from('generation_logs').delete({ count: 'exact' }).lt('timestamp', cutoffDate);
+            const minRetentionIso = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+            const safeCutoff = cutoffDate < minRetentionIso ? cutoffDate : minRetentionIso;
+            const { count } = await supabase.from('generation_logs').delete({ count: 'exact' }).lt('timestamp', safeCutoff);
             deletedCounts.generation_logs = count || 0;
             totalDeleted += deletedCounts.generation_logs;
           }

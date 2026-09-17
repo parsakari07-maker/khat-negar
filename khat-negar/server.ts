@@ -23,6 +23,9 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
+  // Trust proxy for accurate client IP detection behind Cloud Run / Nginx
+  app.set('trust proxy', true);
+
   // Global Middlewares
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -426,10 +429,13 @@ async function startServer() {
         if (!usage.canGeneratePrimary) {
           const settings = db.getAppSettings();
           const eitaaUrl = settings.eitaa_channel_url || 'https://eitaa.com/khatnegar';
+          const dynamicError = settings.daily_limit_exceeded_title_fa?.replace('{limit}', String(usage.dailyLimit)) ||
+            `سقف استفاده رایگان شما برای امروز (${usage.dailyLimit} بار در روز) تکمیل شده است. برای دسترسی نامحدود به مولد پرامپت، لطفاً اشتراک ویژه خط‌نگار را فعال فرمایید.`;
+
           return res.status(403).json({
             success: false,
             code: 'DAILY_LIMIT_REACHED',
-            error: 'سقف استفاده رایگان شما برای امروز (۱ بار در روز) تکمیل شده است. برای دسترسی نامحدود به مولد پرامپت، لطفاً اشتراک ویژه خط‌نگار را فعال فرمایید.',
+            error: dynamicError,
             eitaa_channel: eitaaUrl,
             daily_primary_used: usage.dailyPrimaryUsed,
             daily_primary_limit: usage.dailyLimit,
@@ -438,7 +444,7 @@ async function startServer() {
         }
       }
 
-      const config = req.body;
+      const config = req.body.config || req.body;
       const result = MasterPromptEngine.generate(config, {
         isGenerateAgain: false
       });
@@ -502,8 +508,9 @@ async function startServer() {
     rateLimit(30, 60 * 1000, 'gen_again'),
     (req: AuthenticatedRequest, res) => {
       try {
-        const { config, currentMasterPromptIndex } = req.body;
-        if (!config) {
+        const config = req.body.config || req.body;
+        const currentMasterPromptIndex = req.body.currentMasterPromptIndex;
+        if (!config || (!config.title && !config.calligraphyStyleId)) {
           return res.status(400).json({ success: false, error: 'تنظیمات ارسال نشده است.' });
         }
 
@@ -715,19 +722,29 @@ async function startServer() {
         notes: notes || admin_notes
       });
 
-      const isSub = updatedUser.is_unlimited;
+      // Authoritative verification that mutation took effect in database
+      const verifiedUser = db.getUserById(id);
+      if (!verifiedUser || Boolean(verifiedUser.is_unlimited) !== isUnlimitedFlag) {
+        return res.status(500).json({
+          success: false,
+          error: 'خطا در اعمال تغییرات در پایگاه داده. وضعیت اشتراک کاربر در پایگاه داده ثبت نشد.'
+        });
+      }
+
+      const isSub = verifiedUser.is_unlimited;
       db.recordAuditLog({
         adminId: req.user!.id,
         adminUsername: req.user!.username,
         action: isSub ? 'فعال‌سازی اشتراک نامحدود' : 'لغو اشتراک نامحدود',
-        details: `اشتراک کاربر «${updatedUser.username}» به وضعیت «${isSub ? 'نامحدود (فعال)' : 'عادی'}» تغییر یافت.`,
+        details: `اشتراک کاربر «${verifiedUser.username}» به وضعیت «${isSub ? 'نامحدود (فعال)' : 'عادی'}» تغییر یافت.`,
         ip: req.clientIp || '127.0.0.1'
       });
 
       return res.json({
         success: true,
-        user: updatedUser,
-        message: isSub ? `اشتراک نامحدود کاربر «${updatedUser.username}» با موفقیت فعال گردید.` : `اشتراک کاربر «${updatedUser.username}» به حالت عادی تغییر یافت.`
+        user: verifiedUser,
+        is_unlimited: isSub,
+        message: isSub ? `اشتراک نامحدود کاربر «${verifiedUser.username}» با موفقیت فعال گردید.` : `اشتراک کاربر «${verifiedUser.username}» به حالت عادی تغییر یافت.`
       });
     } catch (err: any) {
       return res.status(400).json({ success: false, error: err.message || 'خطا در اعمال وضعیت اشتراک کاربر.' });
@@ -1669,7 +1686,7 @@ async function startServer() {
   });
 
   // Universal Database Maintenance & Data Retention Cleanup Endpoint
-  app.post('/api/admin/maintenance/cleanup', requireAdmin, (req: AuthenticatedRequest, res) => {
+  const handleCleanup = (req: AuthenticatedRequest, res: express.Response) => {
     try {
       const { target, olderThanDays, statusFilter } = req.body;
       const validTargets = ['all', 'login_logs', 'audit_logs', 'security_events', 'generation_logs', 'feedback_reports'];
@@ -1704,7 +1721,10 @@ async function startServer() {
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || 'خطا در عملیات پاکسازی دیتابیس.' });
     }
-  });
+  };
+
+  app.post('/api/admin/maintenance/cleanup', requireAdmin, handleCleanup);
+  app.post('/api/admin/system/cleanup', requireAdmin, handleCleanup);
 
   // Export Supabase PostgreSQL Migration & Seed SQL
   app.get('/api/admin/export-sql', requireAdmin, (req: AuthenticatedRequest, res) => {

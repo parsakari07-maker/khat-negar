@@ -86,7 +86,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   // System & Security
   allow_prompt_cycling: true,
   rate_limit_per_minute: 20,
-  suspicious_ip_threshold: 3,
+  suspicious_ip_threshold: 2,
   failed_login_threshold: 5
 };
 
@@ -175,8 +175,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const serverMerged = { ...DEFAULT_CLIENT_SETTINGS, ...data.settings };
         setSettings(serverMerged);
         localStorage.setItem('app_system_settings', JSON.stringify(serverMerged));
+        window.dispatchEvent(new CustomEvent('app_settings_changed', { detail: serverMerged }));
         return true;
       }
+      window.dispatchEvent(new CustomEvent('app_settings_changed', { detail: updatedMerged }));
       return ok;
     } catch (err) {
       console.error('Error saving settings:', err);

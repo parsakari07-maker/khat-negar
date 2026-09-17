@@ -74,10 +74,15 @@ export function AdminSecurityEvents() {
   const getEventNameFa = (type: string) => {
     switch (type) {
       case 'MULTIPLE_IPS_FAST':
+      case 'multiple_ips':
+      case 'MULTIPLE_IPS':
         return 'ورود همزمان/سریع از چندین آدرس IP مجزا';
       case 'EXCESSIVE_FAILED_LOGINS':
+      case 'failed_logins':
+      case 'failed_login':
         return 'تلاش‌های متوالی و مشکوک ناموفق برای ورود';
       case 'CONCURRENT_SESSIONS':
+      case 'concurrent_sessions':
         return 'نشست‌های همزمان فعال در نقاط مختلف';
       default:
         return type;

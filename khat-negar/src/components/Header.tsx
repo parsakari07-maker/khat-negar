@@ -156,8 +156,13 @@ export function Header({ currentView, onChangeView, onOpenLogin, onOpenFeedback 
                   {user.role === 'admin'
                     ? 'مدیر ارشد سامانه'
                     : user.is_unlimited
-                      ? 'اشتراک نامحدود فعال'
-                      : `سقف امروز: ${user.daily_primary_remaining ?? 1} از ۱`}
+                      ? (settings.daily_limit_badge_unlimited_fa || 'اشتراک نامحدود فعال')
+                      : (() => {
+                          const currentLimit = settings.daily_free_limit && Number(settings.daily_free_limit) > 0 ? Number(settings.daily_free_limit) : (user.daily_primary_limit || 1);
+                          const used = user.daily_primary_used ?? (user.daily_primary_limit !== undefined && user.daily_primary_remaining !== undefined ? Math.max(0, user.daily_primary_limit - user.daily_primary_remaining) : 0);
+                          const rem = Math.max(0, currentLimit - used);
+                          return `سقف امروز: ${rem} از ${currentLimit}`;
+                        })()}
                 </span>
               </div>
               <button

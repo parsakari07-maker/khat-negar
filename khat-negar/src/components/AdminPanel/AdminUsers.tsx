@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   UserPlus,
   Search,
@@ -17,10 +17,16 @@ import {
   X,
   AlertCircle,
   Crown,
-  Zap
+  Zap,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  SlidersHorizontal
 } from 'lucide-react';
 import { apiFetch } from '../../utils/api.js';
 import type { User, LoginLog } from '../../types.js';
+
+type SortField = 'username' | 'ip_count' | 'usage_today' | 'last_login' | 'created_at' | 'subscription';
 
 export function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
@@ -28,6 +34,10 @@ export function AdminUsers() {
   const [search, setSearch] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -89,6 +99,45 @@ export function AdminUsers() {
     fetchUsers();
   }, [search]);
 
+  // Handle Sort Toggle
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  // Memoized sorted users list
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      let compareVal = 0;
+      if (sortField === 'username') {
+        compareVal = (a.username || '').localeCompare(b.username || '', 'fa');
+      } else if (sortField === 'ip_count') {
+        compareVal = (a.ip_count || 0) - (b.ip_count || 0);
+      } else if (sortField === 'usage_today') {
+        const totalA = (a.today_primary_count || 0) + (a.today_generate_again_count || 0);
+        const totalB = (b.today_primary_count || 0) + (b.today_generate_again_count || 0);
+        compareVal = totalA - totalB;
+      } else if (sortField === 'last_login') {
+        const timeA = a.last_login_at ? new Date(a.last_login_at).getTime() : 0;
+        const timeB = b.last_login_at ? new Date(b.last_login_at).getTime() : 0;
+        compareVal = timeA - timeB;
+      } else if (sortField === 'created_at') {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        compareVal = timeA - timeB;
+      } else if (sortField === 'subscription') {
+        const isUnlA = a.is_unlimited ? 1 : 0;
+        const isUnlB = b.is_unlimited ? 1 : 0;
+        compareVal = isUnlA - isUnlB;
+      }
+      return sortDirection === 'asc' ? compareVal : -compareVal;
+    });
+  }, [users, sortField, sortDirection]);
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -129,7 +178,7 @@ export function AdminUsers() {
 
   const handleOpenSubscription = (user: User) => {
     setTargetUser(user);
-    setSubPlanType(user.is_unlimited ? 'unlimited' : 'unlimited');
+    setSubPlanType(user.is_unlimited ? 'unlimited' : 'unlimited'); // default to unlimited when opening
     setSubNotes(user.subscription_notes || user.subscription?.notes || '');
     setShowSubscriptionModal(true);
   };
@@ -140,11 +189,13 @@ export function AdminUsers() {
     setErrorMessage(null);
     setSubLoading(true);
     try {
+      const isActivating = subPlanType === 'unlimited';
       const { ok, data } = await apiFetch(`/api/admin/users/${targetUser.id}/subscription`, {
         method: 'POST',
         body: JSON.stringify({
           plan_type: subPlanType,
-          status: 'active',
+          is_unlimited: isActivating,
+          status: isActivating ? 'active' : 'free',
           admin_notes: subNotes
         })
       });
@@ -167,12 +218,14 @@ export function AdminUsers() {
     setErrorMessage(null);
     const newPlan = user.is_unlimited ? 'free' : 'unlimited';
     try {
+      const isActivating = newPlan === 'unlimited';
       const { ok, data } = await apiFetch(`/api/admin/users/${user.id}/subscription`, {
         method: 'POST',
         body: JSON.stringify({
           plan_type: newPlan,
-          status: 'active',
-          admin_notes: newPlan === 'unlimited' ? 'فعال‌سازی سریع نامحدود از پنل' : 'تغییر به وضعیت عادی از پنل'
+          is_unlimited: isActivating,
+          status: isActivating ? 'active' : 'free',
+          admin_notes: isActivating ? 'فعال‌سازی سریع نامحدود از پنل' : 'تغییر به وضعیت عادی از پنل'
         })
       });
       if (ok && data.success) {
@@ -330,16 +383,58 @@ export function AdminUsers() {
         </div>
       )}
 
-      {/* Search Filter */}
-      <div className="relative max-w-md">
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="جستجوی نام کاربری..."
-          className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
-        />
-        <Search className="w-4 h-4 text-[var(--text-muted)] absolute right-3.5 top-3" />
+      {/* Search & Sort Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Search Bar */}
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="جستجوی نام کاربری..."
+            className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
+          />
+          <Search className="w-4 h-4 text-[var(--text-muted)] absolute right-3.5 top-3" />
+        </div>
+
+        {/* Sort Filter Dropdown */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+            <span className="text-[var(--text-muted)] font-bold text-[11px]">مرتب‌سازی:</span>
+            <select
+              value={sortField}
+              onChange={e => setSortField(e.target.value as SortField)}
+              className="bg-transparent border-none text-xs font-bold text-[var(--text-primary)] focus:outline-hidden cursor-pointer"
+            >
+              <option value="created_at">تاریخ عضویت (جدیدترین)</option>
+              <option value="usage_today">بیشترین مصرف امروز</option>
+              <option value="ip_count">بیشترین تعداد IP</option>
+              <option value="username">نام کاربری (حروف الفبا)</option>
+              <option value="last_login">آخرین زمان ورود</option>
+              <option value="subscription">وضعیت اشتراک (نامحدود)</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+            className="p-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[#F55951] transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+            title={sortDirection === 'desc' ? 'ترتیب: نزولی (بیشترین/جدیدترین به کمترین)' : 'ترتیب: صعودی (کمترین/قدیمی‌ترین به بیشترین)'}
+          >
+            {sortDirection === 'desc' ? (
+              <>
+                <ArrowDown className="w-3.5 h-3.5 text-[#F55951]" />
+                <span className="hidden sm:inline text-[10px]">نزولی</span>
+              </>
+            ) : (
+              <>
+                <ArrowUp className="w-3.5 h-3.5 text-[#F55951]" />
+                <span className="hidden sm:inline text-[10px]">صعودی</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Users Table */}
@@ -347,13 +442,58 @@ export function AdminUsers() {
         <table className="w-full text-right text-xs">
           <thead className="bg-[var(--bg-surface)] border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold">
             <tr>
-              <th className="p-4">نام کاربری</th>
+              <th className="p-4 cursor-pointer hover:text-[var(--text-primary)] transition select-none" onClick={() => handleSort('username')}>
+                <div className="flex items-center gap-1">
+                  <span>نام کاربری</span>
+                  {sortField === 'username' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-[#F55951]" /> : <ArrowDown className="w-3 h-3 text-[#F55951]" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
               <th className="p-4">نقش</th>
-              <th className="p-4">وضعیت اشتراک</th>
-              <th className="p-4">مصرف امروز</th>
+              <th className="p-4 cursor-pointer hover:text-[var(--text-primary)] transition select-none" onClick={() => handleSort('subscription')}>
+                <div className="flex items-center gap-1">
+                  <span>وضعیت اشتراک</span>
+                  {sortField === 'subscription' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-[#F55951]" /> : <ArrowDown className="w-3 h-3 text-[#F55951]" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th className="p-4 cursor-pointer hover:text-[var(--text-primary)] transition select-none" onClick={() => handleSort('usage_today')}>
+                <div className="flex items-center gap-1">
+                  <span>مصرف ۲۴ ساعت گذشته</span>
+                  {sortField === 'usage_today' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-[#F55951]" /> : <ArrowDown className="w-3 h-3 text-[#F55951]" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
               <th className="p-4">وضعیت حساب</th>
-              <th className="p-4">تعداد IP ثبت‌شده</th>
-              <th className="p-4">آخرین ورود</th>
+              <th className="p-4 cursor-pointer hover:text-[var(--text-primary)] transition select-none" onClick={() => handleSort('ip_count')}>
+                <div className="flex items-center gap-1">
+                  <span>تعداد IP ورود</span>
+                  {sortField === 'ip_count' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-[#F55951]" /> : <ArrowDown className="w-3 h-3 text-[#F55951]" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
+              <th className="p-4 cursor-pointer hover:text-[var(--text-primary)] transition select-none" onClick={() => handleSort('last_login')}>
+                <div className="flex items-center gap-1">
+                  <span>آخرین ورود</span>
+                  {sortField === 'last_login' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-[#F55951]" /> : <ArrowDown className="w-3 h-3 text-[#F55951]" />
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
+                  )}
+                </div>
+              </th>
               <th className="p-4">وضعیت امنیتی</th>
               <th className="p-4 text-center">عملیات</th>
             </tr>
@@ -365,159 +505,173 @@ export function AdminUsers() {
                   در حال بارگذاری اطلاعات کاربران...
                 </td>
               </tr>
-            ) : users.length === 0 ? (
+            ) : sortedUsers.length === 0 ? (
               <tr>
                 <td colSpan={9} className="p-8 text-center text-[var(--text-muted)]">
                   کاربری با این مشخصات یافت نشد.
                 </td>
               </tr>
             ) : (
-              users.map(u => (
-                <tr key={u.id} className="hover:bg-[var(--bg-surface)]/60 transition">
-                  <td className="p-4 font-bold text-sm">
-                    <div className="flex items-center gap-2">
-                      <span>{u.username}</span>
-                      {u.auth_provider === 'eitaa' && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold border border-orange-500/20" title={`کاربر برنامک ایتا (شناسه: ${u.eitaa_id || 'نامشخص'})`}>
-                          برنامک ایتا
+              sortedUsers.map(u => {
+                const totalToday = (u.today_primary_count || 0) + (u.today_generate_again_count || 0);
+                const hasMultipleIps = (u.ip_count || 0) > 1;
+
+                return (
+                  <tr key={u.id} className="hover:bg-[var(--bg-surface)]/60 transition">
+                    <td className="p-4 font-bold text-sm">
+                      <div className="flex items-center gap-2">
+                        <span>{u.username}</span>
+                        {u.auth_provider === 'eitaa' && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold border border-orange-500/20" title={`کاربر برنامک ایتا (شناسه: ${u.eitaa_id || 'نامشخص'})`}>
+                            برنامک ایتا
+                          </span>
+                        )}
+                        {u.username === 'admin' && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 font-bold">
+                            مدیر اصلی
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-xs font-semibold">
+                        {u.role === 'admin' ? 'مدیر کل' : 'کاربر عادی'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      {u.is_unlimited ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSubscription(u)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-[11px] border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer"
+                          title="کلیک جهت مدیریت اشتراک"
+                        >
+                          <Crown className="w-3.5 h-3.5 text-amber-500" />
+                          <span>نامحدود</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSubscription(u)}
+                          className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-gray-500/10 hover:bg-gray-500/20 text-[var(--text-secondary)] text-[11px] font-medium transition cursor-pointer"
+                          title="کلیک جهت ارتقا به اشتراک نامحدود"
+                        >
+                          <span>رایگان</span>
+                        </button>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {totalToday > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded-lg bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs">
+                              {totalToday} پرامپت
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                            {u.today_primary_count || 0} اصلی + {u.today_generate_again_count || 0} بازتولید
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-[var(--text-muted)] font-mono">۰ پرامپت</span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {u.is_active ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>فعال</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-500">
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>غیرفعال (مسدود)</span>
                         </span>
                       )}
-                      {u.username === 'admin' && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 font-bold">
-                          مدیر اصلی
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className="text-xs font-semibold">
-                      {u.role === 'admin' ? 'مدیر کل' : 'کاربر عادی'}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    {u.is_unlimited ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSubscription(u)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-[11px] border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer"
-                        title="کلیک جهت مدیریت اشتراک"
-                      >
-                        <Crown className="w-3.5 h-3.5 text-amber-500" />
-                        <span>نامحدود</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSubscription(u)}
-                        className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-gray-500/10 hover:bg-gray-500/20 text-[var(--text-secondary)] text-[11px] font-medium transition cursor-pointer"
-                        title="کلیک جهت ارتقا به اشتراک نامحدود"
-                      >
-                        <span>رایگان</span>
-                      </button>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <div className="text-[11px] font-mono whitespace-nowrap">
-                      <span className="font-bold text-[var(--text-primary)]">{u.today_primary_count || 0}</span>
-                      <span className="text-[10px] text-[var(--text-muted)] mr-1">اصلی</span>
-                      <span className="text-[var(--text-muted)] mx-1">/</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{u.today_generate_again_count || 0}</span>
-                      <span className="text-[10px] text-[var(--text-muted)] mr-1">بازتولید</span>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    {u.is_active ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>فعال</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-500">
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>غیرفعال (مسدود)</span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4 font-mono dir-ltr text-right">
-                    <span className="px-2 py-1 rounded-md bg-[var(--bg-surface)] border border-[var(--border-color)] text-[11px]">
-                      {u.ip_count} IP
-                    </span>
-                  </td>
-                  <td className="p-4 text-[11px] text-[var(--text-muted)]">
-                    {u.last_login_at ? (
-                      new Date(u.last_login_at).toLocaleDateString('fa-IR', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    ) : (
-                      'تاکنون وارد نشده'
-                    )}
-                  </td>
-                  <td className="p-4">
-                    {u.is_suspicious ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                        <ShieldAlert className="w-3 h-3 text-amber-500" />
-                        <span>فعالیت مشکوک</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">عادی</span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSubscription(u)}
-                        className={`p-1.5 rounded-lg border transition cursor-pointer ${
-                          u.is_unlimited
-                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 hover:bg-amber-500/25'
-                            : 'bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-amber-500 text-amber-500'
-                        }`}
-                        title="مدیریت اشتراک نامحدود"
-                      >
-                        <Crown className="w-3.5 h-3.5" />
-                      </button>
+                    </td>
+                    <td className="p-4 font-mono dir-ltr text-right">
                       <button
                         type="button"
                         onClick={() => handleOpenHistory(u)}
-                        className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-indigo-500 text-indigo-500 transition cursor-pointer"
-                        title="تاریخچه ورود و IPها"
+                        className="px-2 py-1 rounded-md bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--text-muted)] text-[var(--text-secondary)] text-[11px] transition cursor-pointer"
+                        title="مشاهده جزئیات تاریخچه ورود و IPها"
                       >
-                        <History className="w-3.5 h-3.5" />
+                        {u.ip_count || 1} IP
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(u)}
-                        className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-amber-500 text-amber-500 transition cursor-pointer"
-                        title="ویرایش کاربر"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenReset(u)}
-                        className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-blue-500 text-blue-500 transition cursor-pointer"
-                        title="تغییر رمز عبور"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                      </button>
-                      {u.username !== 'admin' && (
+                    </td>
+                    <td className="p-4 text-[11px] text-[var(--text-muted)]">
+                      {u.last_login_at ? (
+                        new Date(u.last_login_at).toLocaleDateString('fa-IR', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      ) : (
+                        'تاکنون وارد نشده'
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {u.is_active ? (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">عادی</span>
+                      ) : (
+                        <span className="text-[11px] text-red-500 font-semibold">مسدود شده</span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setDeleteTargetUser(u)}
-                          className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-red-500 text-red-500 transition cursor-pointer"
-                          title="حذف کاربر"
+                          onClick={() => handleOpenSubscription(u)}
+                          className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                            u.is_unlimited
+                              ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 hover:bg-amber-500/25'
+                              : 'bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-amber-500 text-amber-500'
+                          }`}
+                          title="مدیریت اشتراک نامحدود"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Crown className="w-3.5 h-3.5" />
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        <button
+                          type="button"
+                          onClick={() => handleOpenHistory(u)}
+                          className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-indigo-500 text-indigo-500 transition cursor-pointer"
+                          title="تاریخچه ورود و IPها"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(u)}
+                          className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-amber-500 text-amber-500 transition cursor-pointer"
+                          title="ویرایش کاربر"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReset(u)}
+                          className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-blue-500 text-blue-500 transition cursor-pointer"
+                          title="تغییر رمز عبور"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </button>
+                        {u.username !== 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTargetUser(u)}
+                            className="p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-red-500 text-red-500 transition cursor-pointer"
+                            title="حذف کاربر"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

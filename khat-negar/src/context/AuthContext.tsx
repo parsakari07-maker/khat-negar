@@ -72,6 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshUser();
+
+    const handleSettingsChanged = () => {
+      refreshUser();
+    };
+
+    window.addEventListener('app_settings_changed', handleSettingsChanged);
+    return () => {
+      window.removeEventListener('app_settings_changed', handleSettingsChanged);
+    };
   }, []);
 
   const login = async (username: string, password: string, delayCommit = false) => {

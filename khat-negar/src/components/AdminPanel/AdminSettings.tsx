@@ -57,7 +57,7 @@ export function AdminSettings() {
       }
     }
     load();
-  }, [globalSettings]);
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1214,11 +1214,11 @@ export function AdminSettings() {
                     type="number"
                     min={2}
                     max={10}
-                    value={formData.suspicious_ip_threshold || 3}
-                    onChange={e => setFormData({ ...formData, suspicious_ip_threshold: parseInt(e.target.value) || 3 })}
+                    value={formData.suspicious_ip_threshold ?? 2}
+                    onChange={e => setFormData({ ...formData, suspicious_ip_threshold: parseInt(e.target.value) || 2 })}
                     className="w-full px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] focus:border-[#F55951] focus:outline-hidden"
                   />
-                  <span className="text-[10px] text-[var(--text-muted)] mt-1 block">پیش‌فرض: ۳ آی‌پی مختلف</span>
+                  <span className="text-[10px] text-[var(--text-muted)] mt-1 block">پیش‌فرض: ۲ آی‌پی مجزا</span>
                 </div>
 
                 <div>

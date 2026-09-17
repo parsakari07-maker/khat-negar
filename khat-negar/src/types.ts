@@ -71,7 +71,7 @@ export interface SecurityEvent {
   id: string;
   user_id: string;
   username: string;
-  event_type: 'multiple_ips' | 'failed_logins' | 'unusual_time' | 'high_volume' | 'concurrent_sessions';
+  event_type: 'multiple_ips' | 'failed_logins' | 'unusual_time' | 'high_volume' | 'concurrent_sessions' | 'MULTIPLE_IPS_FAST' | 'EXCESSIVE_FAILED_LOGINS' | string;
   description: string;
   severity: 'low' | 'medium' | 'high';
   ip_address: string;

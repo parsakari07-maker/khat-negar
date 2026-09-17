@@ -57,17 +57,27 @@ const SUPERADMIN_ID = '00000000-0000-0000-0000-000000000001';
 function getTodayMidnightIso(): string {
   try {
     const tehranDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date());
-    return new Date(`${tehranDateStr}T00:00:00+03:30`).toISOString();
+    return new Date(`${tehranDateStr}T00:00:00.000+03:30`).toISOString();
   } catch {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString();
+    const now = new Date();
+    const tehranOffsetMs = (3 * 60 + 30) * 60 * 1000;
+    const tehranNow = new Date(now.getTime() + tehranOffsetMs);
+    const year = tehranNow.getUTCFullYear();
+    const month = String(tehranNow.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(tehranNow.getUTCDate()).padStart(2, '0');
+    return new Date(`${year}-${month}-${day}T00:00:00.000+03:30`).toISOString();
   }
+}
+
+function getTomorrowMidnightIso(): string {
+  const startMs = new Date(getTodayMidnightIso()).getTime();
+  return new Date(startMs + 24 * 60 * 60 * 1000).toISOString();
 }
 
 function formatUserWithQuota(user: any, usage?: any): any {
   if (!user) return null;
-  const isUnlimited = user.is_unlimited === true || user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa' || (user.subscription_status === 'active' && (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()));
+  const isExpired = !!user.subscription_expires_at && new Date(user.subscription_expires_at).getTime() <= Date.now();
+  const isUnlimited = user.role === 'admin' || user.id === SUPERADMIN_ID || user.username === 'parsa' || (!isExpired && (user.is_unlimited === true || user.subscription_status === 'active'));
   const planName = user.subscription_plan_name || (isUnlimited ? 'نامحدود' : '');
   const status = isUnlimited ? 'active' : (user.subscription_status || 'free');
 
@@ -112,6 +122,27 @@ function formatUserWithQuota(user: any, usage?: any): any {
   };
 }
 
+async function getSiteSettings(supabase: SupabaseClient | null): Promise<typeof DEFAULT_APP_SETTINGS> {
+  let settings = { ...DEFAULT_APP_SETTINGS };
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('settings_json')
+        .eq('id', 'default')
+        .maybeSingle();
+
+      if (!error && data && data.settings_json) {
+        const parsed = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
+        settings = { ...DEFAULT_APP_SETTINGS, ...parsed };
+      }
+    } catch (e) {
+      console.error('Error fetching site_settings:', e);
+    }
+  }
+  return settings;
+}
+
 async function getUserUsageFromSupabase(
   supabase: SupabaseClient | null,
   user: any,
@@ -127,17 +158,19 @@ async function getUserUsageFromSupabase(
   lastPrimaryUsageAt: string | null;
   nextResetAt: string | null;
 }> {
+  const isExpired = !!user?.subscription_expires_at && new Date(user.subscription_expires_at).getTime() <= Date.now();
   let isUnlimited = !!user && (
-    user.is_unlimited === true ||
     user.role === 'admin' ||
     user.id === SUPERADMIN_ID ||
     user.username === 'parsa' ||
-    (user.subscription_status === 'active' &&
-      (!user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now()))
+    (!isExpired && (
+      user.is_unlimited === true ||
+      user.subscription_status === 'active'
+    ))
   );
 
   // Authoritative check on user_subscriptions table in Supabase
-  if (!isUnlimited && supabase && user?.id && user.id !== SUPERADMIN_ID) {
+  if (!isUnlimited && !isExpired && supabase && user?.id && user.id !== SUPERADMIN_ID) {
     try {
       const { data: sub } = await supabase
         .from('user_subscriptions')
@@ -157,23 +190,11 @@ async function getUserUsageFromSupabase(
     } catch {}
   }
 
-  const freeLimit = 1;
-  const windowMs = 24 * 60 * 60 * 1000;
-  const nowMs = Date.now();
-  const windowStartIso = new Date(nowMs - windowMs).toISOString();
-
-  if (isUnlimited) {
-    return {
-      dailyPrimaryUsed: 0,
-      dailyGenerateAgainUsed: 0,
-      dailyLimit: 999999,
-      remaining: 999999,
-      canGeneratePrimary: true,
-      isUnlimited: true,
-      lastPrimaryUsageAt: user?.last_primary_generation_at || null,
-      nextResetAt: null
-    };
-  }
+  const appSettings = await getSiteSettings(supabase);
+  const freeLimit = Number(appSettings.daily_free_limit) > 0 ? Number(appSettings.daily_free_limit) : 1;
+  const todayStartIso = getTodayMidnightIso();
+  const todayStartMs = new Date(todayStartIso).getTime();
+  const nextResetIso = getTomorrowMidnightIso();
 
   const effectiveFp = deviceFingerprint || user?.created_device_fingerprint;
   const effectiveEitaaId = eitaaId || user?.eitaa_id;
@@ -184,7 +205,9 @@ async function getUserUsageFromSupabase(
   if (supabase) {
     try {
       const orFilters: string[] = [];
-      if (user?.id) orFilters.push(`user_id.eq.${user.id}`);
+      const isValidUuid = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
+      if (user?.id && isValidUuid) orFilters.push(`user_id.eq.${user.id}`);
+      if (user?.username) orFilters.push(`username.ilike.${user.username}`);
       if (effectiveFp) orFilters.push(`device_fingerprint.eq.${effectiveFp}`);
       if (effectiveEitaaId) orFilters.push(`eitaa_id.eq.${effectiveEitaaId}`);
 
@@ -192,7 +215,7 @@ async function getUserUsageFromSupabase(
         const { data } = await supabase
           .from('generation_logs')
           .select('id, is_generate_again, timestamp')
-          .gte('timestamp', windowStartIso)
+          .gte('timestamp', todayStartIso)
           .or(orFilters.join(','))
           .order('timestamp', { ascending: false });
 
@@ -207,18 +230,30 @@ async function getUserUsageFromSupabase(
   }
 
   const userLastPrimaryAt = user?.last_primary_generation_at ? new Date(user.last_primary_generation_at).getTime() : 0;
-  const userUsedWithin24h = userLastPrimaryAt > (nowMs - windowMs);
+  const userUsedToday = userLastPrimaryAt >= todayStartMs;
 
-  const dailyPrimaryUsed = (primaryLogs.length > 0 || userUsedWithin24h) ? 1 : 0;
+  const dailyPrimaryUsed = primaryLogs.length > 0 ? primaryLogs.length : (userUsedToday ? 1 : 0);
   const dailyGenerateAgainUsed = againLogs.length;
+
+  if (isUnlimited) {
+    return {
+      dailyPrimaryUsed,
+      dailyGenerateAgainUsed,
+      dailyLimit: 999999,
+      remaining: 999999,
+      canGeneratePrimary: true,
+      isUnlimited: true,
+      lastPrimaryUsageAt: user?.last_primary_generation_at || (primaryLogs[0]?.timestamp || null),
+      nextResetAt: null
+    };
+  }
+
   const remaining = Math.max(0, freeLimit - dailyPrimaryUsed);
   const canGeneratePrimary = dailyPrimaryUsed < freeLimit;
 
   const latestLogTimestamp = primaryLogs[0] ? new Date(primaryLogs[0].timestamp).getTime() : userLastPrimaryAt;
   const lastPrimaryUsageAt = latestLogTimestamp > 0 ? new Date(latestLogTimestamp).toISOString() : null;
-  const nextResetAt = (!canGeneratePrimary && latestLogTimestamp > 0)
-    ? new Date(latestLogTimestamp + windowMs).toISOString()
-    : null;
+  const nextResetAt = !canGeneratePrimary ? nextResetIso : null;
 
   return {
     dailyPrimaryUsed,
@@ -283,10 +318,21 @@ function getSupabase(env: Env): SupabaseClient | null {
 
 function getClientIp(request: Request): string {
   const cfConnectingIp = request.headers.get('cf-connecting-ip');
-  if (cfConnectingIp) return cfConnectingIp;
+  if (cfConnectingIp && cfConnectingIp.trim()) return cfConnectingIp.trim();
+
+  const xRealIp = request.headers.get('x-real-ip');
+  if (xRealIp && xRealIp.trim()) return xRealIp.trim();
+
+  const trueClientIp = request.headers.get('true-client-ip');
+  if (trueClientIp && trueClientIp.trim()) return trueClientIp.trim();
+
+  const xClientIp = request.headers.get('x-client-ip');
+  if (xClientIp && xClientIp.trim()) return xClientIp.trim();
+
   const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  if (forwarded && forwarded.trim()) {
+    const firstIp = forwarded.split(',')[0].trim();
+    if (firstIp) return firstIp;
   }
   return '127.0.0.1';
 }
@@ -538,6 +584,18 @@ async function findUserById(supabase: SupabaseClient | null, env: Env, id: strin
 
       if (!error && data) {
         const userRec = { ...(data as UserRecord) };
+        const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
+        const baseUnlimited = !isExp && (
+          userRec.is_unlimited === true ||
+          (userRec.is_unlimited as any) === 'true' ||
+          (userRec.is_unlimited as any) === 1 ||
+          userRec.subscription_status === 'active'
+        );
+        userRec.is_unlimited = baseUnlimited;
+        if (baseUnlimited) {
+          userRec.subscription_status = 'active';
+        }
+
         try {
           const { data: sub } = await supabase
             .from('user_subscriptions')
@@ -551,11 +609,16 @@ async function findUserById(supabase: SupabaseClient | null, env: Env, id: strin
           if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
             userRec.is_unlimited = true;
             userRec.subscription_status = 'active';
-            userRec.subscription_plan_name = sub.plan_name || 'نامحدود';
-            userRec.subscription_activated_at = sub.activated_at || sub.created_at;
+            userRec.subscription_plan_name = sub.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
             userRec.subscription_expires_at = sub.expires_at;
-            userRec.subscription_activated_by = sub.activated_by;
-            userRec.subscription_notes = sub.notes;
+            userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = sub.notes || userRec.subscription_notes;
+          } else if (!baseUnlimited) {
+            userRec.is_unlimited = false;
+            if (userRec.subscription_status !== 'expired') {
+              userRec.subscription_status = 'free';
+            }
           }
         } catch {}
 
@@ -580,6 +643,18 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
 
       if (!error && data) {
         const userRec = { ...(data as UserRecord) };
+        const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
+        const baseUnlimited = !isExp && (
+          userRec.is_unlimited === true ||
+          (userRec.is_unlimited as any) === 'true' ||
+          (userRec.is_unlimited as any) === 1 ||
+          userRec.subscription_status === 'active'
+        );
+        userRec.is_unlimited = baseUnlimited;
+        if (baseUnlimited) {
+          userRec.subscription_status = 'active';
+        }
+
         try {
           const { data: sub } = await supabase
             .from('user_subscriptions')
@@ -593,11 +668,16 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
           if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
             userRec.is_unlimited = true;
             userRec.subscription_status = 'active';
-            userRec.subscription_plan_name = sub.plan_name || 'نامحدود';
-            userRec.subscription_activated_at = sub.activated_at || sub.created_at;
+            userRec.subscription_plan_name = sub.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
             userRec.subscription_expires_at = sub.expires_at;
-            userRec.subscription_activated_by = sub.activated_by;
-            userRec.subscription_notes = sub.notes;
+            userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = sub.notes || userRec.subscription_notes;
+          } else if (!baseUnlimited) {
+            userRec.is_unlimited = false;
+            if (userRec.subscription_status !== 'expired') {
+              userRec.subscription_status = 'free';
+            }
           }
         } catch {}
 
@@ -694,6 +774,7 @@ async function recordLoginLog(
     const isSuccess = status === 'success';
     const isValidUuid = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
     const safeUserId = isValidUuid ? userId : null;
+    const nowIso = new Date().toISOString();
 
     const logEntry: any = {
       id: crypto.randomUUID(),
@@ -702,20 +783,155 @@ async function recordLoginLog(
       role: userRole || 'user',
       ip_address: (ip || '127.0.0.1').slice(0, 64),
       user_agent: userAgent || 'Unknown Browser',
+      status: isSuccess ? 'success' : 'failed',
       success: isSuccess,
+      reason: failureReason ? failureReason.slice(0, 500) : null,
       fail_reason: failureReason ? failureReason.slice(0, 500) : null,
       device_info: deviceInfo ? deviceInfo.slice(0, 500) : null,
-      timestamp: new Date().toISOString()
+      timestamp: nowIso
     };
 
-    const { error } = await supabase.from('login_logs').insert(logEntry);
+    let { error } = await supabase.from('login_logs').insert(logEntry);
     if (error) {
-      const fallbackEntry = { ...logEntry };
+      console.warn('login_logs insert error, attempting fallback without foreign key/extra fields:', error.message);
+      const fallbackEntry = { ...logEntry, user_id: null };
       delete fallbackEntry.device_info;
-      await supabase.from('login_logs').insert(fallbackEntry);
+      const { error: err2 } = await supabase.from('login_logs').insert(fallbackEntry);
+      if (err2) {
+        console.error('Failed to insert login log even with null user_id:', err2.message);
+      }
+    }
+
+    // Security Monitoring & Anomaly Detection
+    const settings = await getSiteSettings(supabase);
+    const rawIpThreshold = Number(settings.suspicious_ip_threshold);
+    const ipThreshold = (rawIpThreshold && rawIpThreshold >= 2) ? rawIpThreshold : 2;
+    const failedThreshold = Number(settings.failed_login_threshold) || 3;
+
+    if (isSuccess) {
+      // Check for multiple IPs across recent logins for this user (48h window)
+      const uniqueIps = new Set<string>();
+      const currentCleanIp = (ip || '').trim();
+      if (currentCleanIp) uniqueIps.add(currentCleanIp);
+
+      try {
+        const timeWindowIso = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+        // 1. Query by normalized username (most reliable and avoids FK/schema mismatch)
+        const { data: uLogs, error: uErr } = await supabase
+          .from('login_logs')
+          .select('ip_address, status, success')
+          .gte('timestamp', timeWindowIso)
+          .ilike('username', username.trim())
+          .order('timestamp', { ascending: false })
+          .limit(50);
+
+        if (uLogs && Array.isArray(uLogs)) {
+          for (const l of uLogs) {
+            const isLogSuccess = l.status === 'success' || l.success === true;
+            if (isLogSuccess && l.ip_address && typeof l.ip_address === 'string' && l.ip_address.trim()) {
+              uniqueIps.add(l.ip_address.trim());
+            }
+          }
+        }
+
+        // 2. Also query by safeUserId if present to catch logins
+        if (safeUserId) {
+          const { data: idLogs } = await supabase
+            .from('login_logs')
+            .select('ip_address, status, success')
+            .gte('timestamp', timeWindowIso)
+            .eq('user_id', safeUserId)
+            .order('timestamp', { ascending: false })
+            .limit(50);
+
+          if (idLogs && Array.isArray(idLogs)) {
+            for (const l of idLogs) {
+              const isLogSuccess = l.status === 'success' || l.success === true;
+              if (isLogSuccess && l.ip_address && typeof l.ip_address === 'string' && l.ip_address.trim()) {
+                uniqueIps.add(l.ip_address.trim());
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to query recent login logs for IP check:', err);
+      }
+
+      if (uniqueIps.size >= ipThreshold) {
+        try {
+          // Mark user as suspicious in users table
+          await supabase.from('users').update({ is_suspicious: true, updated_at: nowIso }).ilike('username', username.trim());
+        } catch {}
+
+        // Check if there is already a recent pending event for this user to avoid duplicate flood
+        const { data: recentPending } = await supabase
+          .from('security_events')
+          .select('id')
+          .ilike('username', username.trim())
+          .eq('event_type', 'MULTIPLE_IPS_FAST')
+          .eq('status', 'pending')
+          .limit(1);
+
+        if (!recentPending || recentPending.length === 0) {
+          const ipListStr = Array.from(uniqueIps).join('، ');
+          const secEvent: any = {
+            id: crypto.randomUUID(),
+            user_id: safeUserId,
+            username: username.trim(),
+            event_type: 'MULTIPLE_IPS_FAST',
+            description: `ورود با چندین آدرس IP مجزا (${uniqueIps.size} آدرس IP: ${ipListStr})`,
+            severity: 'medium',
+            ip_address: (currentCleanIp || '127.0.0.1').slice(0, 64),
+            status: 'pending',
+            timestamp: nowIso
+          };
+
+          const { error: secErr } = await supabase.from('security_events').insert(secEvent);
+          if (secErr) {
+            console.warn('security_events insert error, attempting fallback with null user_id:', secErr.message);
+            secEvent.user_id = null;
+            await supabase.from('security_events').insert(secEvent);
+          }
+        }
+      }
+    } else {
+      // Check failed attempts
+      const { data: failedLogs } = await supabase
+        .from('login_logs')
+        .select('id, timestamp')
+        .eq('success', false)
+        .ilike('username', username)
+        .order('timestamp', { ascending: false })
+        .limit(10);
+
+      if (failedLogs && failedLogs.length >= failedThreshold) {
+        if (safeUserId) {
+          try {
+            await supabase.from('users').update({ is_suspicious: true, updated_at: nowIso }).eq('id', safeUserId);
+          } catch {}
+        }
+        const failedSecEvent: any = {
+          id: crypto.randomUUID(),
+          user_id: safeUserId,
+          username: username,
+          event_type: 'EXCESSIVE_FAILED_LOGINS',
+          description: `بیش از ${failedLogs.length} تلاش ناموفق پیاپی برای ورود به حساب کاربری`,
+          severity: 'high',
+          ip_address: (ip || '127.0.0.1').slice(0, 64),
+          status: 'pending',
+          timestamp: nowIso
+        };
+
+        const { error: failedErr } = await supabase.from('security_events').insert(failedSecEvent);
+        if (failedErr) {
+          failedSecEvent.user_id = null;
+          await supabase.from('security_events').insert(failedSecEvent);
+        }
+      }
     }
   } catch (e) {
-    console.error('Failed to record login log:', e);
+    console.error('Failed to record login log / security anomaly check:', e);
   }
 }
 
@@ -1054,10 +1270,16 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
       // Enforce 24-hour quota for free users on primary generation
       if (user && !usage.canGeneratePrimary) {
+        const appSettings = await getSiteSettings(supabase);
+        const freeLimit = usage.dailyLimit || appSettings.daily_free_limit || 1;
+        const exceededTemplate = appSettings.daily_limit_exceeded_desc_fa ||
+          `سقف استفاده رایگان شما برای دوره ۲۴ ساعته ({limit} بار) تکمیل شده است. برای دسترسی نامحدود به مولد پرامپت، لطفاً اشتراک ویژه خط‌نگار را فعال فرمایید.`;
+        const errorMsg = exceededTemplate.replace(/{limit}/g, String(freeLimit));
+
         return jsonResponse({
           success: false,
           code: 'DAILY_LIMIT_REACHED',
-          error: 'سقف استفاده رایگان شما برای دوره ۲۴ ساعته (۱ بار) تکمیل شده است. برای دسترسی نامحدود به مولد پرامپت، لطفاً اشتراک ویژه خط‌نگار را فعال فرمایید.',
+          error: errorMsg,
           daily_primary_used: usage.dailyPrimaryUsed,
           daily_primary_limit: usage.dailyLimit,
           daily_primary_remaining: 0,
@@ -1069,30 +1291,35 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       const nowIso = new Date().toISOString();
       if (supabase) {
         try {
+          const isValidUuid = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
+          const safeUserId = isValidUuid ? user.id : null;
+
           await supabase.from('generation_logs').insert({
             id: crypto.randomUUID(),
-            user_id: user ? user.id : null,
-            username: user ? user.username : 'مهمان',
+            user_id: safeUserId,
+            username: user?.username || 'مهمان',
             master_prompt_id: masterPrompt.id,
             master_prompt_name: masterPrompt.name_fa,
             ai_model_id: aiModel.id,
             style_id: style.id,
             form_id: form.id,
             is_generate_again: false,
-            device_fingerprint: deviceFingerprint,
-            eitaa_id: user?.eitaa_id,
+            device_fingerprint: deviceFingerprint || null,
+            eitaa_id: user?.eitaa_id || null,
             ip_address: clientIp.slice(0, 64),
             timestamp: nowIso
           });
 
-          if (user && user.id !== SUPERADMIN_ID) {
+          if (user && user.id !== SUPERADMIN_ID && isValidUuid) {
             await supabase.from('users').update({
               last_usage_at: nowIso,
               last_primary_generation_at: nowIso,
               updated_at: nowIso
             }).eq('id', user.id);
           }
-        } catch {}
+        } catch (genErr) {
+          console.error('Failed to insert primary generation log:', genErr);
+        }
       }
 
       const updatedUsage = await getUserUsageFromSupabase(supabase, user, deviceFingerprint, user?.eitaa_id);
@@ -1231,22 +1458,27 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       const user = await getUserFromRequest(request, env, supabase);
       if (supabase) {
         try {
+          const isValidUuid = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
+          const safeUserId = isValidUuid ? user.id : null;
+
           await supabase.from('generation_logs').insert({
             id: crypto.randomUUID(),
-            user_id: user ? user.id : null,
-            username: user ? user.username : 'مهمان',
+            user_id: safeUserId,
+            username: user?.username || 'مهمان',
             master_prompt_id: masterPrompt.id,
             master_prompt_name: masterPrompt.name_fa,
             ai_model_id: aiModel.id,
             style_id: style.id,
             form_id: form.id,
             is_generate_again: true,
-            device_fingerprint: deviceFingerprint,
-            eitaa_id: user?.eitaa_id,
+            device_fingerprint: deviceFingerprint || null,
+            eitaa_id: user?.eitaa_id || null,
             ip_address: clientIp.slice(0, 64),
             timestamp: new Date().toISOString()
           });
-        } catch {}
+        } catch (againErr) {
+          console.error('Failed to insert generate-again log:', againErr);
+        }
       }
 
       return jsonResponse({
@@ -1861,25 +2093,38 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
                   (l.username && l.username.toLowerCase() === u.username.toLowerCase()) ||
                   (u.eitaa_id && l.eitaa_id === u.eitaa_id)
                 );
-                const todayPrimary = userTodayLogs.filter(l => !l.is_generate_again).length;
-                const todayRegenerations = userTodayLogs.filter(l => !!l.is_generate_again).length;
+                const primaryToday = userTodayLogs.filter(l => !l.is_generate_again).length;
+                const regenerationsToday = userTodayLogs.filter(l => !!l.is_generate_again).length;
 
+                const isExp = !!u.subscription_expires_at && new Date(u.subscription_expires_at).getTime() <= now;
                 const userSub = subsData.find(s => s.user_id === u.id && (!s.expires_at || new Date(s.expires_at).getTime() > now));
-                if (userSub) {
-                  u.is_unlimited = true;
+                const isUnlimited = u.role === 'admin' || u.id === SUPERADMIN_ID || u.username === 'parsa' || (!isExp && (
+                  u.is_unlimited === true ||
+                  (u.is_unlimited as any) === 'true' ||
+                  (u.is_unlimited as any) === 1 ||
+                  u.subscription_status === 'active' ||
+                  !!userSub
+                ));
+
+                u.is_unlimited = isUnlimited;
+                if (isUnlimited) {
                   u.subscription_status = 'active';
-                  u.subscription_plan_name = userSub.plan_name || 'نامحدود';
-                  u.subscription_activated_at = userSub.activated_at || userSub.created_at;
-                  u.subscription_expires_at = userSub.expires_at;
-                  u.subscription_activated_by = userSub.activated_by;
-                  u.subscription_notes = userSub.notes;
+                  u.subscription_plan_name = userSub?.plan_name || u.subscription_plan_name || 'نامحدود';
+                  if (userSub) {
+                    u.subscription_activated_at = userSub.activated_at || userSub.created_at || u.subscription_activated_at;
+                    u.subscription_expires_at = userSub.expires_at;
+                    u.subscription_activated_by = userSub.activated_by || u.subscription_activated_by;
+                    u.subscription_notes = userSub.notes || u.subscription_notes;
+                  }
+                } else if (u.subscription_status !== 'expired') {
+                  u.subscription_status = 'free';
                 }
 
                 const formatted = formatUserWithQuota(u);
                 return {
                   ...formatted,
-                  today_primary_count: todayPrimary,
-                  today_generate_again_count: todayRegenerations,
+                  today_primary_count: primaryToday,
+                  today_generate_again_count: regenerationsToday,
                   password_hash: '',
                   ip_count: uniqueIps.length,
                   last_login_at: lastLogin,
@@ -2016,7 +2261,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             ? false
             : (typeof is_unlimited === 'boolean' ? is_unlimited : status === 'active'));
 
-        const finalStatus = isUnlimitedFlag ? 'active' : 'standard';
+        const finalStatus = isUnlimitedFlag ? 'active' : 'free';
         const finalPlanName = plan_name || (isUnlimitedFlag ? 'نامحدود' : '');
         const finalNotes = admin_notes || notes || '';
         const now = new Date().toISOString();
@@ -2057,31 +2302,39 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             .select('*')
             .maybeSingle();
 
-          if (error && (error.message.includes('column') || error.code === '42703')) {
-            const fallbackPayload: any = { updated_at: now };
-            const { data: fbData } = await supabase
+          if (error && (error.message?.includes('column') || error.code === '42703')) {
+            console.warn('Supabase users table missing some subscription metadata columns, retrying with core fields:', error.message);
+            const corePayload: any = {
+              is_unlimited: isUnlimitedFlag,
+              subscription_status: finalStatus,
+              subscription_plan_name: finalPlanName,
+              updated_at: now
+            };
+            const res2 = await supabase
               .from('users')
-              .update(fallbackPayload)
+              .update(corePayload)
               .eq('id', targetUserId)
               .select('*')
               .maybeSingle();
 
-            if (fbData) {
-              data = { ...fbData, ...updatePayload };
-            }
-          }
+            data = res2.data;
+            error = res2.error;
 
-          if (data) {
-            updatedUser = {
-              ...data,
-              is_unlimited: isUnlimitedFlag,
-              subscription_status: finalStatus,
-              subscription_plan_name: finalPlanName,
-              subscription_notes: finalNotes,
-              subscription_activated_by: authedUser.username,
-              subscription_activated_at: isUnlimitedFlag ? now : null,
-              subscription_expires_at: expiresAt
-            };
+            if (error && (error.message?.includes('column') || error.code === '42703')) {
+              const minPayload = {
+                is_unlimited: isUnlimitedFlag,
+                subscription_status: finalStatus,
+                updated_at: now
+              };
+              const res3 = await supabase
+                .from('users')
+                .update(minPayload)
+                .eq('id', targetUserId)
+                .select('*')
+                .maybeSingle();
+
+              data = res3.data;
+            }
           }
 
           try {
@@ -2093,7 +2346,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
               .eq('status', 'active');
 
             if (isUnlimitedFlag) {
-              await supabase.from('user_subscriptions').insert({
+              const { error: insertErr } = await supabase.from('user_subscriptions').insert({
                 id: crypto.randomUUID(),
                 user_id: targetUserId,
                 plan_name: finalPlanName,
@@ -2103,10 +2356,34 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
                 expires_at: expiresAt,
                 created_at: now
               });
+              if (insertErr && (insertErr.message?.includes('column') || insertErr.code === '42703')) {
+                await supabase.from('user_subscriptions').insert({
+                  id: crypto.randomUUID(),
+                  user_id: targetUserId,
+                  plan_name: finalPlanName,
+                  status: 'active',
+                  created_at: now
+                });
+              }
             }
           } catch (e) {
             console.error('Error synchronizing user_subscriptions:', e);
           }
+
+          // Authoritative verification directly from database
+          const verifiedUser = await findUserById(supabase, env, targetUserId);
+          if (!verifiedUser || Boolean(verifiedUser.is_unlimited) !== isUnlimitedFlag) {
+            console.error('Database verification failed after updating subscription:', {
+              targetUserId,
+              isUnlimitedFlag,
+              verifiedUser
+            });
+            return jsonResponse({
+              success: false,
+              error: 'خطا در ثبت و اعتبارسنجی تغییرات در پایگاه داده. وضعیت اشتراک کاربر در پایگاه داده اعمال نشد.'
+            }, 500);
+          }
+          updatedUser = verifiedUser;
         }
 
         const actionText = isUnlimitedFlag ? 'فعال‌سازی اشتراک نامحدود' : 'لغو اشتراک نامحدود';
@@ -2120,9 +2397,12 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           clientIp
         );
 
+        const finalUsage = await getUserUsageFromSupabase(supabase, updatedUser);
+
         return jsonResponse({
           success: true,
-          user: formatUserWithQuota(updatedUser),
+          user: formatUserWithQuota(updatedUser, finalUsage),
+          is_unlimited: isUnlimitedFlag,
           message: isUnlimitedFlag
             ? `اشتراک نامحدود کاربر «${targetUsername}» با موفقیت فعال گردید.`
             : `اشتراک کاربر «${targetUsername}» به وضعیت عادی تغییر یافت.`
@@ -2923,7 +3203,21 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
       if (method === 'POST' || method === 'PATCH') {
         const body = await request.json() as any;
-        const mergedSettings = { ...DEFAULT_APP_SETTINGS, ...body };
+        const currentSettings = await getSiteSettings(supabase);
+        const mergedSettings = { ...DEFAULT_APP_SETTINGS, ...currentSettings, ...body };
+
+        if (mergedSettings.daily_free_limit !== undefined) {
+          mergedSettings.daily_free_limit = Math.max(1, parseInt(String(mergedSettings.daily_free_limit), 10) || 1);
+        }
+        if (mergedSettings.suspicious_ip_threshold !== undefined) {
+          mergedSettings.suspicious_ip_threshold = Math.max(2, parseInt(String(mergedSettings.suspicious_ip_threshold), 10) || 2);
+        }
+        if (mergedSettings.failed_login_threshold !== undefined) {
+          mergedSettings.failed_login_threshold = Math.max(2, parseInt(String(mergedSettings.failed_login_threshold), 10) || 3);
+        }
+        if (mergedSettings.rate_limit_per_minute !== undefined) {
+          mergedSettings.rate_limit_per_minute = Math.max(5, parseInt(String(mergedSettings.rate_limit_per_minute), 10) || 20);
+        }
 
         if (supabase) {
           const { error } = await supabase.from('site_settings').upsert({
@@ -2937,7 +3231,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           }
         }
 
-        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'به‌روزرسانی تنظیمات سامانه', 'تغییر تنظیمات عمومی سامانه', clientIp);
+        await recordAuditLog(supabase, authedUser.id, authedUser.username, 'به‌روزرسانی تنظیمات سامانه', `تغییر تنظیمات عمومی (سقف روزانه: ${mergedSettings.daily_free_limit})`, clientIp);
         return jsonResponse({ success: true, settings: mergedSettings, message: 'تنظیمات با موفقیت در سامانه ذخیره گردید.' });
       }
     }
@@ -2977,7 +3271,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             totalDeleted += deletedCounts.security_events;
           }
           if (target === 'all' || target === 'generation_logs') {
-            const { count } = await supabase.from('generation_logs').delete({ count: 'exact' }).lt('timestamp', cutoffDate);
+            const minRetentionIso = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+            const safeCutoff = cutoffDate < minRetentionIso ? cutoffDate : minRetentionIso;
+            const { count } = await supabase.from('generation_logs').delete({ count: 'exact' }).lt('timestamp', safeCutoff);
             deletedCounts.generation_logs = count || 0;
             totalDeleted += deletedCounts.generation_logs;
           }

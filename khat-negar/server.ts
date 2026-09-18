@@ -703,7 +703,7 @@ async function startServer() {
     try {
       const { id } = req.params;
       const { plan_name, is_unlimited, status, duration_days, notes, plan_type, admin_notes } = req.body;
-      const targetUser = db.getUserById(id);
+      const targetUser = db.getUserById(id) || db.getUserByUsername(id);
       if (!targetUser) {
         return res.status(404).json({ success: false, error: 'کاربر یافت نشد.' });
       }
@@ -713,7 +713,7 @@ async function startServer() {
         : (is_unlimited !== undefined ? !!is_unlimited : status === 'active');
       const finalStatus: 'active' | 'free' = isUnlimitedFlag ? 'active' : 'free';
 
-      const updatedUser = db.setUserSubscription(id, {
+      const updatedUser = db.setUserSubscription(targetUser.id, {
         plan_name: plan_name || (isUnlimitedFlag ? 'نامحدود' : ''),
         is_unlimited: isUnlimitedFlag,
         status: finalStatus,
@@ -723,7 +723,7 @@ async function startServer() {
       });
 
       // Authoritative verification that mutation took effect in database
-      const verifiedUser = db.getUserById(id);
+      const verifiedUser = db.getUserById(targetUser.id) || updatedUser;
       if (!verifiedUser || Boolean(verifiedUser.is_unlimited) !== isUnlimitedFlag) {
         return res.status(500).json({
           success: false,

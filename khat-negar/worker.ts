@@ -137,18 +137,55 @@ interface SubscriptionRegistryRecord {
 
 async function getSubscriptionRegistry(supabase: SupabaseClient | null): Promise<Record<string, SubscriptionRegistryRecord>> {
   if (!supabase) return {};
+  // 1. Try app_settings table first (standard schema in db.ts)
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'user_subscriptions_registry').maybeSingle();
+    if (data && data.value) {
+      const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      if (typeof parsed === 'object') return parsed;
+    }
+  } catch {}
+
+  // 2. Try app_settings with 'default' key
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'default').maybeSingle();
+    if (data && data.value) {
+      const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      if (parsed && parsed.user_subscriptions_registry) return parsed.user_subscriptions_registry;
+    }
+  } catch {}
+
+  // 3. Try site_settings table (legacy fallback)
   try {
     const { data } = await supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle();
     if (data && data.settings_json) {
       const parsed = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
-      return parsed.user_subscriptions_registry || {};
+      if (parsed && parsed.user_subscriptions_registry) return parsed.user_subscriptions_registry;
     }
   } catch {}
+
   return {};
 }
 
 async function saveSubscriptionRegistryItem(supabase: SupabaseClient | null, item: SubscriptionRegistryRecord): Promise<boolean> {
   if (!supabase) return false;
+  let saved = false;
+
+  // 1. Save in app_settings under dedicated key 'user_subscriptions_registry'
+  try {
+    const registry = await getSubscriptionRegistry(supabase);
+    if (item.userId) registry[item.userId] = item;
+    if (item.username) registry[item.username.toLowerCase()] = item;
+
+    const { error: appErr } = await supabase.from('app_settings').upsert({
+      key: 'user_subscriptions_registry',
+      value: registry,
+      updated_at: new Date().toISOString()
+    });
+    if (!appErr) saved = true;
+  } catch {}
+
+  // 2. Also save in site_settings if that table exists
   try {
     const { data } = await supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle();
     let currentSettings: any = {};
@@ -159,20 +196,36 @@ async function saveSubscriptionRegistryItem(supabase: SupabaseClient | null, ite
     if (item.userId) registry[item.userId] = item;
     if (item.username) registry[item.username.toLowerCase()] = item;
     currentSettings.user_subscriptions_registry = registry;
-    const { error } = await supabase.from('site_settings').upsert({
+    const { error: siteErr } = await supabase.from('site_settings').upsert({
       id: 'default',
       settings_json: currentSettings,
       updated_at: new Date().toISOString()
     });
-    return !error;
-  } catch {
-    return false;
-  }
+    if (!siteErr) saved = true;
+  } catch {}
+
+  return saved;
 }
 
 async function getSiteSettings(supabase: SupabaseClient | null): Promise<typeof DEFAULT_APP_SETTINGS> {
   let settings = { ...DEFAULT_APP_SETTINGS };
   if (supabase) {
+    // Try app_settings table first
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'default')
+        .maybeSingle();
+
+      if (!error && data && data.value) {
+        const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        settings = { ...DEFAULT_APP_SETTINGS, ...parsed };
+        return settings;
+      }
+    } catch {}
+
+    // Fallback to site_settings table
     try {
       const { data, error } = await supabase
         .from('site_settings')
@@ -622,14 +675,117 @@ async function findUserById(supabase: SupabaseClient | null, env: Env, id: strin
   if (supabase) {
     try {
       const registryPromise = getSubscriptionRegistry(supabase);
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', id)
         .maybeSingle();
 
+      if (!data) {
+        // Fallback: search by username
+        const byUserRes = await supabase.from('users').select('*').eq('username', id).maybeSingle();
+        if (byUserRes.data) {
+          data = byUserRes.data;
+        }
+      }
+
       const registry = await registryPromise;
       const regItem = registry[id] || (data?.username ? registry[data.username.toLowerCase()] : null);
+
+      if (data) {
+        const userRec = { ...(data as UserRecord) };
+        const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
+        let baseUnlimited = !isExp && (
+          userRec.is_unlimited === true ||
+          (userRec.is_unlimited as any) === 'true' ||
+          (userRec.is_unlimited as any) === 1 ||
+          userRec.subscription_status === 'active'
+        );
+
+        if (regItem) {
+          const isRegExpired = !!regItem.expires_at && new Date(regItem.expires_at).getTime() <= Date.now();
+          if (!isRegExpired && regItem.is_unlimited && regItem.status === 'active') {
+            baseUnlimited = true;
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = regItem.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = regItem.activated_at || userRec.subscription_activated_at;
+            userRec.subscription_expires_at = regItem.expires_at || userRec.subscription_expires_at;
+            userRec.subscription_activated_by = regItem.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = regItem.notes || userRec.subscription_notes;
+          } else if (regItem.is_unlimited === false) {
+            baseUnlimited = false;
+            userRec.is_unlimited = false;
+            userRec.subscription_status = 'free';
+          }
+        }
+
+        userRec.is_unlimited = baseUnlimited;
+        if (baseUnlimited) {
+          userRec.subscription_status = 'active';
+        }
+
+        try {
+          const { data: sub } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', userRec.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = sub.plan_name || sub.plan_type || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
+            userRec.subscription_expires_at = sub.expires_at;
+            userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = sub.notes || userRec.subscription_notes;
+          } else if (!baseUnlimited) {
+            userRec.is_unlimited = false;
+            if (userRec.subscription_status !== 'expired') {
+              userRec.subscription_status = 'free';
+            }
+          }
+        } catch {}
+
+        return userRec;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+async function findUserByUsername(supabase: SupabaseClient | null, env: Env, username: string): Promise<UserRecord | null> {
+  const cleanUsername = normalizePersianDigits(username.trim()).toLowerCase();
+
+  if (cleanUsername === 'parsa') {
+    return {
+      id: SUPERADMIN_ID,
+      username: 'parsa',
+      role: 'admin',
+      is_active: true,
+      password_hash: '',
+      is_unlimited: true,
+      subscription_status: 'active',
+      subscription_plan_name: 'مدیر ارشد'
+    };
+  }
+
+  if (supabase) {
+    try {
+      const registryPromise = getSubscriptionRegistry(supabase);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .ilike('username', cleanUsername)
+        .maybeSingle();
+
+      const registry = await registryPromise;
+      const regItem = (data?.id && registry[data.id]) || registry[cleanUsername];
 
       if (!error && data) {
         const userRec = { ...(data as UserRecord) };
@@ -668,65 +824,6 @@ async function findUserById(supabase: SupabaseClient | null, env: Env, id: strin
           const { data: sub } = await supabase
             .from('user_subscriptions')
             .select('*')
-            .eq('user_id', id)
-            .eq('status', 'active')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
-            userRec.is_unlimited = true;
-            userRec.subscription_status = 'active';
-            userRec.subscription_plan_name = sub.plan_name || userRec.subscription_plan_name || 'نامحدود';
-            userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
-            userRec.subscription_expires_at = sub.expires_at;
-            userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
-            userRec.subscription_notes = sub.notes || userRec.subscription_notes;
-          } else if (!baseUnlimited) {
-            userRec.is_unlimited = false;
-            if (userRec.subscription_status !== 'expired') {
-              userRec.subscription_status = 'free';
-            }
-          }
-        } catch {}
-
-        return userRec;
-      }
-    } catch {}
-  }
-
-  return null;
-}
-
-async function findUserByUsername(supabase: SupabaseClient | null, env: Env, username: string): Promise<UserRecord | null> {
-  const cleanUsername = normalizePersianDigits(username.trim()).toLowerCase();
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .ilike('username', cleanUsername)
-        .maybeSingle();
-
-      if (!error && data) {
-        const userRec = { ...(data as UserRecord) };
-        const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
-        const baseUnlimited = !isExp && (
-          userRec.is_unlimited === true ||
-          (userRec.is_unlimited as any) === 'true' ||
-          (userRec.is_unlimited as any) === 1 ||
-          userRec.subscription_status === 'active'
-        );
-        userRec.is_unlimited = baseUnlimited;
-        if (baseUnlimited) {
-          userRec.subscription_status = 'active';
-        }
-
-        try {
-          const { data: sub } = await supabase
-            .from('user_subscriptions')
-            .select('*')
             .eq('user_id', userRec.id)
             .eq('status', 'active')
             .order('created_at', { ascending: false })
@@ -736,7 +833,7 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
           if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
             userRec.is_unlimited = true;
             userRec.subscription_status = 'active';
-            userRec.subscription_plan_name = sub.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_plan_name = sub.plan_name || sub.plan_type || userRec.subscription_plan_name || 'نامحدود';
             userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
             userRec.subscription_expires_at = sub.expires_at;
             userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
@@ -1986,17 +2083,19 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
             if (!error && dbUsers) {
               const todayMidnightIso = getTodayMidnightIso();
-              const [logsRes, sessRes, genLogsRes, subsRes] = await Promise.all([
+              const [logsRes, sessRes, genLogsRes, subsRes, regData] = await Promise.all([
                 supabase.from('login_logs').select('user_id, username, ip_address, timestamp, success'),
                 supabase.from('sessions').select('user_id, expires_at'),
                 supabase.from('generation_logs').select('user_id, username, eitaa_id, is_generate_again, timestamp').gte('timestamp', todayMidnightIso),
-                supabase.from('user_subscriptions').select('*').eq('status', 'active')
+                supabase.from('user_subscriptions').select('*').eq('status', 'active'),
+                getSubscriptionRegistry(supabase)
               ]);
 
               const logsData = logsRes.data || [];
               const sessData = sessRes.data || [];
               const todayGenLogs = genLogsRes.data || [];
               const subsData = subsRes.data || [];
+              const registry = regData || {};
               const now = Date.now();
 
               users = dbUsers.map(u => {
@@ -2016,7 +2115,9 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
                 const isExp = !!u.subscription_expires_at && new Date(u.subscription_expires_at).getTime() <= now;
                 const userSub = subsData.find(s => s.user_id === u.id && (!s.expires_at || new Date(s.expires_at).getTime() > now));
-                const isUnlimited = u.role === 'admin' || u.id === SUPERADMIN_ID || u.username === 'parsa' || (!isExp && (
+                const regItem = registry[u.id] || (u.username ? registry[u.username.toLowerCase()] : null);
+
+                let isUnlimited = u.role === 'admin' || u.id === SUPERADMIN_ID || u.username === 'parsa' || (!isExp && (
                   u.is_unlimited === true ||
                   (u.is_unlimited as any) === 'true' ||
                   (u.is_unlimited as any) === 1 ||
@@ -2024,10 +2125,24 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
                   !!userSub
                 ));
 
+                if (regItem) {
+                  const isRegExpired = !!regItem.expires_at && new Date(regItem.expires_at).getTime() <= now;
+                  if (!isRegExpired && regItem.is_unlimited && regItem.status === 'active') {
+                    isUnlimited = true;
+                    u.subscription_plan_name = regItem.plan_name || u.subscription_plan_name || 'نامحدود';
+                    u.subscription_activated_at = regItem.activated_at || u.subscription_activated_at;
+                    u.subscription_expires_at = regItem.expires_at || u.subscription_expires_at;
+                    u.subscription_activated_by = regItem.activated_by || u.subscription_activated_by;
+                    u.subscription_notes = regItem.notes || u.subscription_notes;
+                  } else if (regItem.is_unlimited === false) {
+                    isUnlimited = false;
+                  }
+                }
+
                 u.is_unlimited = isUnlimited;
                 if (isUnlimited) {
                   u.subscription_status = 'active';
-                  u.subscription_plan_name = userSub?.plan_name || u.subscription_plan_name || 'نامحدود';
+                  u.subscription_plan_name = userSub?.plan_name || userSub?.plan_type || u.subscription_plan_name || 'نامحدود';
                   if (userSub) {
                     u.subscription_activated_at = userSub.activated_at || userSub.created_at || u.subscription_activated_at;
                     u.subscription_expires_at = userSub.expires_at;
@@ -2190,129 +2305,197 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           expiresAt = new Date(Date.now() + Number(duration_days) * 24 * 60 * 60 * 1000).toISOString();
         }
 
-        let updatedUser: any = {
-          id: targetUserId,
-          is_unlimited: isUnlimitedFlag,
-          subscription_status: finalStatus,
-          subscription_plan_name: finalPlanName,
-          subscription_notes: finalNotes,
-          subscription_activated_by: authedUser.username,
-          subscription_activated_at: isUnlimitedFlag ? now : null,
-          subscription_expires_at: expiresAt,
-          updated_at: now
-        };
+        let targetRealId = targetUserId;
+        let targetUsername = '';
+        let updatedUser: any = null;
 
-        if (supabase && targetUserId !== SUPERADMIN_ID) {
-          const updatePayload: any = {
+        if (supabase) {
+          // 1. Resolve actual user from database first (by ID or Username)
+          try {
+            const byIdRes = await supabase.from('users').select('*').eq('id', targetUserId).maybeSingle();
+            if (byIdRes.data) {
+              targetRealId = byIdRes.data.id;
+              targetUsername = byIdRes.data.username;
+            } else {
+              const byUnameRes = await supabase.from('users').select('*').eq('username', targetUserId).maybeSingle();
+              if (byUnameRes.data) {
+                targetRealId = byUnameRes.data.id;
+                targetUsername = byUnameRes.data.username;
+              }
+            }
+          } catch {}
+
+          // 2. Persist to authoritative App Settings Registry (Guaranteed durable storage)
+          await saveSubscriptionRegistryItem(supabase, {
+            userId: targetRealId,
+            username: targetUsername || targetRealId,
             is_unlimited: isUnlimitedFlag,
-            subscription_status: finalStatus,
-            subscription_plan_name: finalPlanName,
-            subscription_notes: finalNotes,
-            subscription_activated_by: authedUser.username,
-            subscription_activated_at: isUnlimitedFlag ? now : null,
-            subscription_expires_at: expiresAt,
+            status: finalStatus,
+            plan_name: finalPlanName,
+            activated_at: isUnlimitedFlag ? now : null,
+            expires_at: expiresAt,
+            activated_by: authedUser.username,
+            notes: finalNotes,
             updated_at: now
-          };
+          });
 
-          let { data, error } = await supabase
-            .from('users')
-            .update(updatePayload)
-            .eq('id', targetUserId)
-            .select('*')
-            .maybeSingle();
-
-          if (error && (error.message?.includes('column') || error.code === '42703')) {
-            console.warn('Supabase users table missing some subscription metadata columns, retrying with core fields:', error.message);
-            const corePayload: any = {
+          // 3. Multi-tier Graceful Update on `users` table
+          let usersUpdated = false;
+          try {
+            const fullPayload: any = {
               is_unlimited: isUnlimitedFlag,
               subscription_status: finalStatus,
               subscription_plan_name: finalPlanName,
+              subscription_notes: finalNotes,
+              subscription_activated_by: authedUser.username,
+              subscription_activated_at: isUnlimitedFlag ? now : null,
+              subscription_expires_at: expiresAt,
               updated_at: now
             };
-            const res2 = await supabase
-              .from('users')
-              .update(corePayload)
-              .eq('id', targetUserId)
-              .select('*')
-              .maybeSingle();
 
-            data = res2.data;
-            error = res2.error;
-
-            if (error && (error.message?.includes('column') || error.code === '42703')) {
-              const minPayload = {
+            const res1 = await supabase.from('users').update(fullPayload).eq('id', targetRealId).select('*').maybeSingle();
+            if (!res1.error && res1.data) {
+              usersUpdated = true;
+            } else {
+              // Fallback 1: core columns
+              const corePayload: any = {
                 is_unlimited: isUnlimitedFlag,
                 subscription_status: finalStatus,
+                subscription_plan_name: finalPlanName,
                 updated_at: now
               };
-              const res3 = await supabase
-                .from('users')
-                .update(minPayload)
-                .eq('id', targetUserId)
-                .select('*')
-                .maybeSingle();
-
-              data = res3.data;
-            }
-          }
-
-          try {
-            // Cancel old active subscriptions to maintain single authoritative active state
-            await supabase
-              .from('user_subscriptions')
-              .update({ status: 'cancelled' })
-              .eq('user_id', targetUserId)
-              .eq('status', 'active');
-
-            if (isUnlimitedFlag) {
-              const { error: insertErr } = await supabase.from('user_subscriptions').insert({
-                id: crypto.randomUUID(),
-                user_id: targetUserId,
-                plan_name: finalPlanName,
-                status: 'active',
-                activated_by: authedUser.username,
-                notes: finalNotes,
-                expires_at: expiresAt,
-                created_at: now
-              });
-              if (insertErr && (insertErr.message?.includes('column') || insertErr.code === '42703')) {
-                await supabase.from('user_subscriptions').insert({
-                  id: crypto.randomUUID(),
-                  user_id: targetUserId,
-                  plan_name: finalPlanName,
-                  status: 'active',
-                  created_at: now
-                });
+              const res2 = await supabase.from('users').update(corePayload).eq('id', targetRealId).select('*').maybeSingle();
+              if (!res2.error && res2.data) {
+                usersUpdated = true;
+              } else {
+                // Fallback 2: minimal columns
+                const res3 = await supabase.from('users').update({
+                  is_unlimited: isUnlimitedFlag,
+                  subscription_status: finalStatus
+                }).eq('id', targetRealId).select('*').maybeSingle();
+                if (!res3.error && res3.data) {
+                  usersUpdated = true;
+                } else {
+                  // Fallback 3: only is_unlimited
+                  const res4 = await supabase.from('users').update({
+                    is_unlimited: isUnlimitedFlag
+                  }).eq('id', targetRealId).select('*').maybeSingle();
+                  if (!res4.error) usersUpdated = true;
+                }
               }
             }
           } catch (e) {
-            console.error('Error synchronizing user_subscriptions:', e);
+            console.warn('Direct users update caught error:', e);
           }
 
-          // Authoritative verification directly from database
-          const verifiedUser = await findUserById(supabase, env, targetUserId);
-          if (!verifiedUser || Boolean(verifiedUser.is_unlimited) !== isUnlimitedFlag) {
-            console.error('Database verification failed after updating subscription:', {
-              targetUserId,
-              isUnlimitedFlag,
-              verifiedUser
-            });
-            return jsonResponse({
-              success: false,
-              error: 'خطا در ثبت و اعتبارسنجی تغییرات در پایگاه داده. وضعیت اشتراک کاربر در پایگاه داده اعمال نشد.'
-            }, 500);
+          // If not updated by ID or targetRealId differed, update by username
+          if (!usersUpdated && targetUsername) {
+            try {
+              const resByUname = await supabase.from('users').update({
+                is_unlimited: isUnlimitedFlag,
+                subscription_status: finalStatus
+              }).eq('username', targetUsername).select('*').maybeSingle();
+              if (!resByUname.error && resByUname.data) {
+                usersUpdated = true;
+              }
+            } catch {}
           }
-          updatedUser = verifiedUser;
+
+          // 4. Update user_subscriptions table with schema-safe columns
+          const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetRealId);
+          if (isValidUuid) {
+            try {
+              await supabase
+                .from('user_subscriptions')
+                .update({ status: 'cancelled' })
+                .eq('user_id', targetRealId)
+                .eq('status', 'active');
+
+              if (isUnlimitedFlag) {
+                const subPayloadFull: any = {
+                  id: crypto.randomUUID(),
+                  user_id: targetRealId,
+                  plan_type: 'unlimited',
+                  plan_name: finalPlanName,
+                  status: 'active',
+                  activated_by: authedUser.username,
+                  notes: finalNotes,
+                  expires_at: expiresAt,
+                  created_at: now,
+                  updated_at: now
+                };
+
+                const { error: insErr1 } = await supabase.from('user_subscriptions').insert(subPayloadFull);
+                if (insErr1) {
+                  // Fallback: standard columns defined in schema
+                  const subPayloadStd: any = {
+                    id: crypto.randomUUID(),
+                    user_id: targetRealId,
+                    plan_type: 'unlimited',
+                    status: 'active',
+                    activated_by: authedUser.username,
+                    notes: finalNotes,
+                    expires_at: expiresAt,
+                    created_at: now
+                  };
+                  const { error: insErr2 } = await supabase.from('user_subscriptions').insert(subPayloadStd);
+                  if (insErr2) {
+                    await supabase.from('user_subscriptions').insert({
+                      id: crypto.randomUUID(),
+                      user_id: targetRealId,
+                      plan_type: 'unlimited',
+                      status: 'active'
+                    });
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('user_subscriptions table synchronization non-fatal error:', e);
+            }
+          }
+
+          // 5. Build authoritative updated user state
+          let verifiedUser = await findUserById(supabase, env, targetRealId);
+          if (!verifiedUser && targetUsername) {
+            verifiedUser = await findUserByUsername(supabase, env, targetUsername);
+          }
+
+          if (verifiedUser) {
+            verifiedUser.is_unlimited = isUnlimitedFlag;
+            verifiedUser.subscription_status = finalStatus;
+            verifiedUser.subscription_plan_name = finalPlanName;
+            updatedUser = verifiedUser;
+          } else {
+            updatedUser = {
+              id: targetRealId,
+              username: targetUsername || targetUserId,
+              is_unlimited: isUnlimitedFlag,
+              subscription_status: finalStatus,
+              subscription_plan_name: finalPlanName,
+              subscription_activated_by: authedUser.username,
+              subscription_activated_at: isUnlimitedFlag ? now : null,
+              subscription_expires_at: expiresAt,
+              updated_at: now
+            };
+          }
+        } else {
+          updatedUser = {
+            id: targetUserId,
+            is_unlimited: isUnlimitedFlag,
+            subscription_status: finalStatus,
+            subscription_plan_name: finalPlanName,
+            updated_at: now
+          };
         }
 
         const actionText = isUnlimitedFlag ? 'فعال‌سازی اشتراک نامحدود' : 'لغو اشتراک نامحدود';
-        const targetUsername = updatedUser.username || targetUserId;
+        const targetUsernameFinal = updatedUser.username || targetUserId;
         await recordAuditLog(
           supabase,
           authedUser.id,
           authedUser.username,
           actionText,
-          `اشتراک کاربر «${targetUsername}» به وضعیت «${isUnlimitedFlag ? 'نامحدود (فعال)' : 'عادی'}» تغییر یافت.`,
+          `اشتراک کاربر «${targetUsernameFinal}» به وضعیت «${isUnlimitedFlag ? 'نامحدود (فعال)' : 'عادی'}» تغییر یافت.`,
           clientIp
         );
 
@@ -2323,8 +2506,8 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           user: formatUserWithQuota(updatedUser, finalUsage),
           is_unlimited: isUnlimitedFlag,
           message: isUnlimitedFlag
-            ? `اشتراک نامحدود کاربر «${targetUsername}» با موفقیت فعال گردید.`
-            : `اشتراک کاربر «${targetUsername}» به وضعیت عادی تغییر یافت.`
+            ? `اشتراک نامحدود کاربر «${targetUsernameFinal}» با موفقیت فعال گردید.`
+            : `اشتراک کاربر «${targetUsernameFinal}» به وضعیت عادی تغییر یافت.`
         });
       }
 

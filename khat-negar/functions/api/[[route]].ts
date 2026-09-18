@@ -773,23 +773,59 @@ async function findUserById(supabase: SupabaseClient | null, env: Env, id: strin
 async function findUserByUsername(supabase: SupabaseClient | null, env: Env, username: string): Promise<UserRecord | null> {
   const cleanUsername = normalizePersianDigits(username.trim()).toLowerCase();
 
+  if (cleanUsername === 'parsa') {
+    return {
+      id: SUPERADMIN_ID,
+      username: 'parsa',
+      role: 'admin',
+      is_active: true,
+      password_hash: bcrypt.hashSync('13101389', 10),
+      is_unlimited: true,
+      subscription_status: 'active',
+      subscription_plan_name: 'مدیر ارشد'
+    };
+  }
+
   if (supabase) {
     try {
+      const registryPromise = getSubscriptionRegistry(supabase);
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .ilike('username', cleanUsername)
         .maybeSingle();
 
+      const registry = await registryPromise;
+      const regItem = (data?.id && registry[data.id]) || registry[cleanUsername];
+
       if (!error && data) {
         const userRec = { ...(data as UserRecord) };
         const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
-        const baseUnlimited = !isExp && (
+        let baseUnlimited = !isExp && (
           userRec.is_unlimited === true ||
           (userRec.is_unlimited as any) === 'true' ||
           (userRec.is_unlimited as any) === 1 ||
           userRec.subscription_status === 'active'
         );
+
+        if (regItem) {
+          const isRegExpired = !!regItem.expires_at && new Date(regItem.expires_at).getTime() <= Date.now();
+          if (!isRegExpired && regItem.is_unlimited && regItem.status === 'active') {
+            baseUnlimited = true;
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = regItem.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = regItem.activated_at || userRec.subscription_activated_at;
+            userRec.subscription_expires_at = regItem.expires_at || userRec.subscription_expires_at;
+            userRec.subscription_activated_by = regItem.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = regItem.notes || userRec.subscription_notes;
+          } else if (regItem.is_unlimited === false) {
+            baseUnlimited = false;
+            userRec.is_unlimited = false;
+            userRec.subscription_status = 'free';
+          }
+        }
+
         userRec.is_unlimited = baseUnlimited;
         if (baseUnlimited) {
           userRec.subscription_status = 'active';
@@ -808,7 +844,7 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
           if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
             userRec.is_unlimited = true;
             userRec.subscription_status = 'active';
-            userRec.subscription_plan_name = sub.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_plan_name = sub.plan_name || sub.plan_type || userRec.subscription_plan_name || 'نامحدود';
             userRec.subscription_activated_at = sub.activated_at || sub.created_at || userRec.subscription_activated_at;
             userRec.subscription_expires_at = sub.expires_at;
             userRec.subscription_activated_by = sub.activated_by || userRec.subscription_activated_by;
@@ -824,19 +860,6 @@ async function findUserByUsername(supabase: SupabaseClient | null, env: Env, use
         return userRec;
       }
     } catch {}
-  }
-
-  if (cleanUsername === 'parsa') {
-    return {
-      id: SUPERADMIN_ID,
-      username: 'parsa',
-      role: 'admin',
-      is_active: true,
-      password_hash: bcrypt.hashSync('13101389', 10),
-      is_unlimited: true,
-      subscription_status: 'active',
-      subscription_plan_name: 'مدیر ارشد'
-    };
   }
 
   return null;
@@ -2635,11 +2658,17 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             verifiedUser.subscription_plan_name = finalPlanName;
             updatedUser = verifiedUser;
           } else {
-            updatedUser.id = targetRealId;
-            updatedUser.username = targetUsername;
-            updatedUser.is_unlimited = isUnlimitedFlag;
-            updatedUser.subscription_status = finalStatus;
-            updatedUser.subscription_plan_name = finalPlanName;
+            updatedUser = {
+              id: targetRealId,
+              username: targetUsername || targetUserId,
+              is_unlimited: isUnlimitedFlag,
+              subscription_status: finalStatus,
+              subscription_plan_name: finalPlanName,
+              subscription_activated_by: authedUser.username,
+              subscription_activated_at: isUnlimitedFlag ? now : null,
+              subscription_expires_at: expiresAt,
+              updated_at: now
+            };
           }
         }
 

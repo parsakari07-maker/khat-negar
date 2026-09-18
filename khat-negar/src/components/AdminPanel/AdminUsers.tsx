@@ -174,7 +174,7 @@ export function AdminUsers() {
       });
       if (ok && data.success) {
         if (newIsUnlimited && data.user?.id) {
-          await apiFetch(`/api/admin/users/${data.user.id}/subscription`, {
+          await apiFetch(`/api/admin/users/${encodeURIComponent(data.user.id)}/subscription`, {
             method: 'POST',
             body: JSON.stringify({
               plan_type: 'unlimited',
@@ -211,15 +211,22 @@ export function AdminUsers() {
     setSubLoading(true);
     try {
       const isActivating = subPlanType === 'unlimited';
-      const { ok, data } = await apiFetch(`/api/admin/users/${targetUser.id}/subscription`, {
+      const { ok, data } = await apiFetch(`/api/admin/users/${encodeURIComponent(targetUser.id)}/subscription`, {
         method: 'POST',
         body: JSON.stringify({
           plan_type: subPlanType,
           is_unlimited: isActivating,
-          status: isActivating ? 'active' : 'free'
+          status: isActivating ? 'active' : 'free',
+          username: targetUser.username,
+          plan_name: isActivating ? 'نامحدود' : ''
         })
       });
-      if (ok && data.success) {
+      if (ok && data?.success) {
+        setUsers(prev => prev.map(u => 
+          u.id === targetUser.id || (u.username && u.username.toLowerCase() === targetUser.username.toLowerCase())
+            ? { ...u, is_unlimited: isActivating, subscription_status: isActivating ? 'active' : 'free', subscription_plan_name: isActivating ? 'نامحدود' : '' }
+            : u
+        ));
         setSuccessMessage(data.message || `وضعیت اشتراک کاربر «${targetUser.username}» با موفقیت به‌روزرسانی شد.`);
         setShowSubscriptionModal(false);
         fetchUsers();
@@ -239,15 +246,22 @@ export function AdminUsers() {
     const newPlan = user.is_unlimited ? 'free' : 'unlimited';
     try {
       const isActivating = newPlan === 'unlimited';
-      const { ok, data } = await apiFetch(`/api/admin/users/${user.id}/subscription`, {
+      const { ok, data } = await apiFetch(`/api/admin/users/${encodeURIComponent(user.id)}/subscription`, {
         method: 'POST',
         body: JSON.stringify({
           plan_type: newPlan,
           is_unlimited: isActivating,
-          status: isActivating ? 'active' : 'free'
+          status: isActivating ? 'active' : 'free',
+          username: user.username,
+          plan_name: isActivating ? 'نامحدود' : ''
         })
       });
-      if (ok && data.success) {
+      if (ok && data?.success) {
+        setUsers(prev => prev.map(u => 
+          u.id === user.id || (u.username && u.username.toLowerCase() === user.username.toLowerCase())
+            ? { ...u, is_unlimited: isActivating, subscription_status: isActivating ? 'active' : 'free', subscription_plan_name: isActivating ? 'نامحدود' : '' }
+            : u
+        ));
         setSuccessMessage(newPlan === 'unlimited' ? `اشتراک نامحدود برای کاربر «${user.username}» فعال شد.` : `اشتراک کاربر «${user.username}» به حالت عادی تغییر یافت.`);
         fetchUsers();
         setTimeout(() => setSuccessMessage(null), 4000);

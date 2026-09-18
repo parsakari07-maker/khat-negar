@@ -4,12 +4,12 @@
       "id": "usr-parsa-admin",
       "username": "parsa",
       "role": "admin",
-      "password_hash": "$2b$10$vDE552QLutxNxClU6zcsPOOSSqoZG3D0kWC0b/RJp5zIj18mNJr06",
+      "password_hash": "$2b$10$uUNmtTW9Ah38bqAHzPHjG.Ior.IebH2d/SMlI85I3feJCjT9PJ9ui",
       "is_active": true,
       "created_at": "2026-08-29T12:11:05.272Z",
-      "updated_at": "2026-09-17T11:30:42.598Z",
+      "updated_at": "2026-09-18T23:21:15.243Z",
       "is_suspicious": false,
-      "last_login_at": "2026-09-17T11:24:04.642Z"
+      "last_login_at": "2026-09-18T23:25:11.223Z"
     },
     {
       "id": "usr-demo-02",
@@ -43,15 +43,15 @@
       "password_hash": "$2b$10$UMQ6fxf1DlyytEwdIlAOHOM1cuCFZxK4rLKRX5k7np1u5R/HsxaDW",
       "is_active": true,
       "created_at": "2026-09-16T17:09:49.708Z",
-      "updated_at": "2026-09-16T17:09:49.708Z",
+      "updated_at": "2026-09-18T23:25:21.677Z",
       "is_suspicious": false,
       "auth_provider": "local",
       "created_device_fingerprint": "dfp_meu1dk_yfcaz3gf",
       "subscription_status": "free",
       "is_unlimited": false,
-      "subscription_activated_at": null,
-      "subscription_expires_at": null,
-      "subscription_activated_by": null,
+      "subscription_activated_at": "2026-09-18T23:25:15.476Z",
+      "subscription_expires_at": "2026-09-18T23:25:21.677Z",
+      "subscription_activated_by": "parsa",
       "last_login_at": "2026-09-16T17:09:49.809Z"
     },
     {
@@ -389,9 +389,29 @@
       "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0",
       "created_at": "2026-09-17T11:24:04.642Z",
       "expires_at": "2027-09-17T11:24:04.642Z"
+    },
+    {
+      "id": "sess-38d28060",
+      "user_id": "usr-parsa-admin",
+      "token": "6e7a1090e20a3ccd4f01bba30dfdb30ec871b1946259966889784ab7425aa8d5",
+      "ip_address": "127.0.0.1",
+      "user_agent": "curl/7.88.1",
+      "created_at": "2026-09-18T23:25:11.223Z",
+      "expires_at": "2027-09-18T23:25:11.223Z"
     }
   ],
   "login_logs": [
+    {
+      "id": "log-1789773911221-dcf8",
+      "user_id": "usr-parsa-admin",
+      "username": "parsa",
+      "timestamp": "2026-09-18T23:25:11.220Z",
+      "ip_address": "127.0.0.1",
+      "user_agent": "curl/7.88.1",
+      "device_info": "مرورگر استاندارد (دستگاه نامشخص)",
+      "status": "success",
+      "is_suspicious": false
+    },
     {
       "id": "log-1789644244640-7e11",
       "user_id": "usr-parsa-admin",
@@ -1441,6 +1461,60 @@
   },
   "admin_audit_logs": [
     {
+      "id": "audit-1789773962609-bb1a",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "حذف حساب کاربری",
+      "details": "حساب کاربری «sub_e2e_user_1789773962270» به طور کامل حذف شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-09-18T23:26:02.609Z"
+    },
+    {
+      "id": "audit-1789773962594-7061",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "لغو اشتراک نامحدود",
+      "details": "اشتراک کاربر «sub_e2e_user_1789773962270» به وضعیت «عادی» تغییر یافت.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-09-18T23:26:02.594Z"
+    },
+    {
+      "id": "audit-1789773962571-8787",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "فعال‌سازی اشتراک نامحدود",
+      "details": "اشتراک کاربر «sub_e2e_user_1789773962270» به وضعیت «نامحدود (فعال)» تغییر یافت.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-09-18T23:26:02.571Z"
+    },
+    {
+      "id": "audit-1789773962541-9831",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "ایجاد کاربر جدید",
+      "details": "کاربر «sub_e2e_user_1789773962270» با نقش «کاربر عادی» ایجاد شد.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-09-18T23:26:02.541Z"
+    },
+    {
+      "id": "audit-1789773921679-5aca",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "لغو اشتراک نامحدود",
+      "details": "اشتراک کاربر «1parsa» به وضعیت «عادی» تغییر یافت.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-09-18T23:25:21.679Z"
+    },
+    {
+      "id": "audit-1789773915479-d224",
+      "admin_id": "usr-parsa-admin",
+      "admin_username": "parsa",
+      "action": "فعال‌سازی اشتراک نامحدود",
+      "details": "اشتراک کاربر «1parsa» به وضعیت «نامحدود (فعال)» تغییر یافت.",
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-09-18T23:25:15.479Z"
+    },
+    {
       "id": "audit-1789579088473-928e",
       "admin_id": "usr-parsa-admin",
       "admin_username": "parsa",
@@ -2238,6 +2312,50 @@
     }
   ],
   "user_subscriptions": [
+    {
+      "id": "sub-1789773962592-de50",
+      "user_id": "usr-71e1ac66",
+      "plan_name": "اشتراک نامحدود اختصاصی خط‌نگار",
+      "status": "cancelled",
+      "activated_at": "2026-09-18T23:26:02.592Z",
+      "expires_at": "2026-09-18T23:26:02.592Z",
+      "activated_by": "parsa",
+      "notes": "لغو اشتراک توسط مدیریت",
+      "created_at": "2026-09-18T23:26:02.592Z"
+    },
+    {
+      "id": "sub-1789773962569-5048",
+      "user_id": "usr-71e1ac66",
+      "plan_name": "نامحدود",
+      "status": "cancelled",
+      "activated_at": "2026-09-18T23:26:02.569Z",
+      "expires_at": null,
+      "activated_by": "parsa",
+      "notes": "فعال‌سازی دستی اشتراک توسط مدیریت",
+      "created_at": "2026-09-18T23:26:02.569Z"
+    },
+    {
+      "id": "sub-1789773921677-300b",
+      "user_id": "usr-e2bf0563",
+      "plan_name": "اشتراک نامحدود اختصاصی خط‌نگار",
+      "status": "cancelled",
+      "activated_at": "2026-09-18T23:25:21.677Z",
+      "expires_at": "2026-09-18T23:25:21.677Z",
+      "activated_by": "parsa",
+      "notes": "لغو اشتراک توسط مدیریت",
+      "created_at": "2026-09-18T23:25:21.677Z"
+    },
+    {
+      "id": "sub-1789773915476-b3f6",
+      "user_id": "usr-e2bf0563",
+      "plan_name": "نامحدود",
+      "status": "cancelled",
+      "activated_at": "2026-09-18T23:25:15.476Z",
+      "expires_at": null,
+      "activated_by": "parsa",
+      "notes": "فعال‌سازی دستی اشتراک توسط مدیریت",
+      "created_at": "2026-09-18T23:25:15.476Z"
+    },
     {
       "id": "sub-1789644642764-6717",
       "user_id": "usr-demo-02",

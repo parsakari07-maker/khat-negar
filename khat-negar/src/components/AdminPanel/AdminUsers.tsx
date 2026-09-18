@@ -59,7 +59,6 @@ export function AdminUsers() {
 
   // Subscription Form State
   const [subPlanType, setSubPlanType] = useState<'unlimited' | 'free'>('unlimited');
-  const [subNotes, setSubNotes] = useState('');
   const [subLoading, setSubLoading] = useState(false);
 
   // Edit Form State
@@ -110,8 +109,31 @@ export function AdminUsers() {
   };
 
   // Memoized sorted users list
+  // Memoized sorted and instantly filtered users list
   const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => {
+    const q = (search || '').trim().toLowerCase();
+    let list = users;
+    if (q) {
+      const normQ = q.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
+      list = users.filter(u => {
+        const uName = (u.username || '').toLowerCase();
+        const uEitaa = (u.eitaa_id || '').toLowerCase();
+        const uRole = (u.role || '').toLowerCase();
+        const uPlan = (u.subscription_plan_name || '').toLowerCase();
+        return (
+          uName.includes(q) ||
+          uName.includes(normQ) ||
+          uEitaa.includes(q) ||
+          uEitaa.includes(normQ) ||
+          uRole.includes(q) ||
+          uPlan.includes(q) ||
+          (q === 'نامحدود' && u.is_unlimited) ||
+          (q === 'رایگان' && !u.is_unlimited)
+        );
+      });
+    }
+
+    return [...list].sort((a, b) => {
       let compareVal = 0;
       if (sortField === 'username') {
         compareVal = (a.username || '').localeCompare(b.username || '', 'fa');
@@ -136,7 +158,7 @@ export function AdminUsers() {
       }
       return sortDirection === 'asc' ? compareVal : -compareVal;
     });
-  }, [users, sortField, sortDirection]);
+  }, [users, search, sortField, sortDirection]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,8 +178,8 @@ export function AdminUsers() {
             method: 'POST',
             body: JSON.stringify({
               plan_type: 'unlimited',
-              status: 'active',
-              admin_notes: 'فعال‌سازی همزمان با صدور اولیه حساب'
+              is_unlimited: true,
+              status: 'active'
             })
           });
         }
@@ -178,8 +200,7 @@ export function AdminUsers() {
 
   const handleOpenSubscription = (user: User) => {
     setTargetUser(user);
-    setSubPlanType(user.is_unlimited ? 'unlimited' : 'unlimited'); // default to unlimited when opening
-    setSubNotes(user.subscription_notes || user.subscription?.notes || '');
+    setSubPlanType(user.is_unlimited ? 'unlimited' : 'unlimited');
     setShowSubscriptionModal(true);
   };
 
@@ -195,8 +216,7 @@ export function AdminUsers() {
         body: JSON.stringify({
           plan_type: subPlanType,
           is_unlimited: isActivating,
-          status: isActivating ? 'active' : 'free',
-          admin_notes: subNotes
+          status: isActivating ? 'active' : 'free'
         })
       });
       if (ok && data.success) {
@@ -224,8 +244,7 @@ export function AdminUsers() {
         body: JSON.stringify({
           plan_type: newPlan,
           is_unlimited: isActivating,
-          status: isActivating ? 'active' : 'free',
-          admin_notes: isActivating ? 'فعال‌سازی سریع نامحدود از پنل' : 'تغییر به وضعیت عادی از پنل'
+          status: isActivating ? 'active' : 'free'
         })
       });
       if (ok && data.success) {
@@ -1098,19 +1117,6 @@ export function AdminUsers() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
-                  یادداشت مدیر (شماره تراکنش / کانال ایتا):
-                </label>
-                <input
-                  type="text"
-                  value={subNotes}
-                  onChange={e => setSubNotes(e.target.value)}
-                  placeholder="مثال: رسید ایتا - فعال‌سازی دستی"
-                  className="w-full px-3 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] focus:border-amber-500 focus:outline-hidden"
-                />
-              </div>
-
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
@@ -1129,7 +1135,7 @@ export function AdminUsers() {
                   ) : (
                     <Crown className="w-3.5 h-3.5" />
                   )}
-                  <span>ثبت و ذخیره وضعیت اشتراک</span>
+                  <span>ثبت و اعمال فوری تغییرات</span>
                 </button>
               </div>
             </form>

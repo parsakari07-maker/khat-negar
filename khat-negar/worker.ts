@@ -122,6 +122,75 @@ function formatUserWithQuota(user: any, usage?: any): any {
   };
 }
 
+interface SubscriptionRegistryRecord {
+  userId: string;
+  username: string;
+  is_unlimited: boolean;
+  status: 'active' | 'free' | 'expired';
+  plan_name: string;
+  activated_at: string | null;
+  expires_at: string | null;
+  activated_by: string;
+  notes?: string;
+  updated_at: string;
+}
+
+async function getSubscriptionRegistry(supabase: SupabaseClient | null): Promise<Record<string, SubscriptionRegistryRecord>> {
+  if (!supabase) return {};
+  try {
+    const { data } = await supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle();
+    if (data && data.settings_json) {
+      const parsed = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
+      return parsed.user_subscriptions_registry || {};
+    }
+  } catch {}
+  return {};
+}
+
+async function saveSubscriptionRegistryItem(supabase: SupabaseClient | null, item: SubscriptionRegistryRecord): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data } = await supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle();
+    let currentSettings: any = {};
+    if (data && data.settings_json) {
+      currentSettings = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
+    }
+    const registry = { ...(currentSettings.user_subscriptions_registry || {}) };
+    if (item.userId) registry[item.userId] = item;
+    if (item.username) registry[item.username.toLowerCase()] = item;
+    currentSettings.user_subscriptions_registry = registry;
+    const { error } = await supabase.from('site_settings').upsert({
+      id: 'default',
+      settings_json: currentSettings,
+      updated_at: new Date().toISOString()
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+async function getSiteSettings(supabase: SupabaseClient | null): Promise<typeof DEFAULT_APP_SETTINGS> {
+  let settings = { ...DEFAULT_APP_SETTINGS };
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('settings_json')
+        .eq('id', 'default')
+        .maybeSingle();
+
+      if (!error && data && data.settings_json) {
+        const parsed = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
+        settings = { ...DEFAULT_APP_SETTINGS, ...parsed };
+      }
+    } catch (e) {
+      console.error('Error fetching site_settings in worker:', e);
+    }
+  }
+  return settings;
+}
+
 async function getUserUsageFromSupabase(
   supabase: SupabaseClient | null,
   user: any,
@@ -148,47 +217,45 @@ async function getUserUsageFromSupabase(
     ))
   );
 
-  // Authoritative check on user_subscriptions table in Supabase
+  // Authoritative check on user_subscriptions table and persistent subscription registry
   if (!isUnlimited && !isExpired && supabase && user?.id && user.id !== SUPERADMIN_ID) {
     try {
-      const { data: sub } = await supabase
-        .from('user_subscriptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const registry = await getSubscriptionRegistry(supabase);
+      const regItem = registry[user.id] || (user.username ? registry[user.username.toLowerCase()] : null);
+      if (regItem && (!regItem.expires_at || new Date(regItem.expires_at).getTime() > Date.now())) {
+        if (regItem.is_unlimited && regItem.status === 'active') {
+          isUnlimited = true;
+          user.is_unlimited = true;
+          user.subscription_status = 'active';
+          user.subscription_plan_name = regItem.plan_name || 'نامحدود';
+        }
+      }
 
-      if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
-        isUnlimited = true;
-        user.is_unlimited = true;
-        user.subscription_status = 'active';
-        user.subscription_plan_name = sub.plan_name || 'نامحدود';
+      if (!isUnlimited) {
+        const { data: sub } = await supabase
+          .from('user_subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+          isUnlimited = true;
+          user.is_unlimited = true;
+          user.subscription_status = 'active';
+          user.subscription_plan_name = sub.plan_name || 'نامحدود';
+        }
       }
     } catch {}
   }
 
-  const freeLimit = 1;
+  const appSettings = await getSiteSettings(supabase);
+  const freeLimit = Number(appSettings.daily_free_limit) > 0 ? Number(appSettings.daily_free_limit) : 1;
   const todayStartIso = getTodayMidnightIso();
   const todayStartMs = new Date(todayStartIso).getTime();
   const nextResetIso = getTomorrowMidnightIso();
-
-  if (isUnlimited) {
-    return {
-      dailyPrimaryUsed: 0,
-      dailyGenerateAgainUsed: 0,
-      dailyLimit: 999999,
-      remaining: 999999,
-      canGeneratePrimary: true,
-      isUnlimited: true,
-      lastPrimaryUsageAt: user?.last_primary_generation_at || null,
-      nextResetAt: null
-    };
-  }
-
-  const effectiveFp = deviceFingerprint || user?.created_device_fingerprint;
-  const effectiveEitaaId = eitaaId || user?.eitaa_id;
 
   let primaryLogs: any[] = [];
   let againLogs: any[] = [];
@@ -196,9 +263,9 @@ async function getUserUsageFromSupabase(
   if (supabase) {
     try {
       const orFilters: string[] = [];
-      if (user?.id) orFilters.push(`user_id.eq.${user.id}`);
-      if (effectiveFp) orFilters.push(`device_fingerprint.eq.${effectiveFp}`);
-      if (effectiveEitaaId) orFilters.push(`eitaa_id.eq.${effectiveEitaaId}`);
+      const isValidUuid = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
+      if (user?.id && isValidUuid) orFilters.push(`user_id.eq.${user.id}`);
+      if (user?.username) orFilters.push(`username.ilike.${user.username}`);
 
       if (orFilters.length > 0) {
         const { data } = await supabase
@@ -214,15 +281,29 @@ async function getUserUsageFromSupabase(
         }
       }
     } catch (e) {
-      console.error('Error fetching usage from Supabase:', e);
+      console.error('Error fetching usage from Supabase in worker:', e);
     }
   }
 
   const userLastPrimaryAt = user?.last_primary_generation_at ? new Date(user.last_primary_generation_at).getTime() : 0;
   const userUsedToday = userLastPrimaryAt >= todayStartMs;
 
-  const dailyPrimaryUsed = (primaryLogs.length > 0 || userUsedToday) ? 1 : 0;
+  const dailyPrimaryUsed = primaryLogs.length > 0 ? primaryLogs.length : (userUsedToday ? 1 : 0);
   const dailyGenerateAgainUsed = againLogs.length;
+
+  if (isUnlimited) {
+    return {
+      dailyPrimaryUsed,
+      dailyGenerateAgainUsed,
+      dailyLimit: 999999,
+      remaining: 999999,
+      canGeneratePrimary: true,
+      isUnlimited: true,
+      lastPrimaryUsageAt: user?.last_primary_generation_at || (primaryLogs[0]?.timestamp || null),
+      nextResetAt: null
+    };
+  }
+
   const remaining = Math.max(0, freeLimit - dailyPrimaryUsed);
   const canGeneratePrimary = dailyPrimaryUsed < freeLimit;
 
@@ -540,21 +621,44 @@ async function findUserById(supabase: SupabaseClient | null, env: Env, id: strin
 
   if (supabase) {
     try {
+      const registryPromise = getSubscriptionRegistry(supabase);
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', id)
         .maybeSingle();
 
+      const registry = await registryPromise;
+      const regItem = registry[id] || (data?.username ? registry[data.username.toLowerCase()] : null);
+
       if (!error && data) {
         const userRec = { ...(data as UserRecord) };
         const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
-        const baseUnlimited = !isExp && (
+        let baseUnlimited = !isExp && (
           userRec.is_unlimited === true ||
           (userRec.is_unlimited as any) === 'true' ||
           (userRec.is_unlimited as any) === 1 ||
           userRec.subscription_status === 'active'
         );
+
+        if (regItem) {
+          const isRegExpired = !!regItem.expires_at && new Date(regItem.expires_at).getTime() <= Date.now();
+          if (!isRegExpired && regItem.is_unlimited && regItem.status === 'active') {
+            baseUnlimited = true;
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = regItem.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = regItem.activated_at || userRec.subscription_activated_at;
+            userRec.subscription_expires_at = regItem.expires_at || userRec.subscription_expires_at;
+            userRec.subscription_activated_by = regItem.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = regItem.notes || userRec.subscription_notes;
+          } else if (regItem.is_unlimited === false) {
+            baseUnlimited = false;
+            userRec.is_unlimited = false;
+            userRec.subscription_status = 'free';
+          }
+        }
+
         userRec.is_unlimited = baseUnlimited;
         if (baseUnlimited) {
           userRec.subscription_status = 'active';

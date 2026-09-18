@@ -186,8 +186,12 @@ export function GeneratorView({ onOpenLogin, isLoggedIn }: GeneratorViewProps) {
   const { user, refreshUser } = useAuth();
   const dailyLimitNum = user?.is_unlimited
     ? 999999
-    : (settings.daily_free_limit && Number(settings.daily_free_limit) > 0 ? Number(settings.daily_free_limit) : (user?.daily_primary_limit || 1));
-  const dailyUsedNum = user?.daily_primary_used ?? (user?.daily_primary_limit !== undefined && user?.daily_primary_remaining !== undefined ? Math.max(0, user.daily_primary_limit - user.daily_primary_remaining) : 0);
+    : (settings.daily_free_limit && Number(settings.daily_free_limit) > 0
+        ? Number(settings.daily_free_limit)
+        : (user?.daily_primary_limit && user.daily_primary_limit > 0 ? user.daily_primary_limit : 1));
+  const dailyUsedNum = typeof user?.daily_primary_used === 'number'
+    ? user.daily_primary_used
+    : (typeof user?.today_primary_count === 'number' ? user.today_primary_count : 0);
   const remainingNum = user?.is_unlimited ? 999999 : Math.max(0, dailyLimitNum - dailyUsedNum);
   const isQuotaDepleted = !!user && !user.is_unlimited && remainingNum === 0;
 

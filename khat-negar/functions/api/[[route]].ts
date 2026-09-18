@@ -122,6 +122,54 @@ function formatUserWithQuota(user: any, usage?: any): any {
   };
 }
 
+interface SubscriptionRegistryRecord {
+  userId: string;
+  username: string;
+  is_unlimited: boolean;
+  status: 'active' | 'free' | 'expired';
+  plan_name: string;
+  activated_at: string | null;
+  expires_at: string | null;
+  activated_by: string;
+  notes?: string;
+  updated_at: string;
+}
+
+async function getSubscriptionRegistry(supabase: SupabaseClient | null): Promise<Record<string, SubscriptionRegistryRecord>> {
+  if (!supabase) return {};
+  try {
+    const { data } = await supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle();
+    if (data && data.settings_json) {
+      const parsed = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
+      return parsed.user_subscriptions_registry || {};
+    }
+  } catch {}
+  return {};
+}
+
+async function saveSubscriptionRegistryItem(supabase: SupabaseClient | null, item: SubscriptionRegistryRecord): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data } = await supabase.from('site_settings').select('settings_json').eq('id', 'default').maybeSingle();
+    let currentSettings: any = {};
+    if (data && data.settings_json) {
+      currentSettings = typeof data.settings_json === 'string' ? JSON.parse(data.settings_json) : data.settings_json;
+    }
+    const registry = { ...(currentSettings.user_subscriptions_registry || {}) };
+    if (item.userId) registry[item.userId] = item;
+    if (item.username) registry[item.username.toLowerCase()] = item;
+    currentSettings.user_subscriptions_registry = registry;
+    const { error } = await supabase.from('site_settings').upsert({
+      id: 'default',
+      settings_json: currentSettings,
+      updated_at: new Date().toISOString()
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 async function getSiteSettings(supabase: SupabaseClient | null): Promise<typeof DEFAULT_APP_SETTINGS> {
   let settings = { ...DEFAULT_APP_SETTINGS };
   if (supabase) {
@@ -169,23 +217,36 @@ async function getUserUsageFromSupabase(
     ))
   );
 
-  // Authoritative check on user_subscriptions table in Supabase
+  // Authoritative check on user_subscriptions table and persistent subscription registry
   if (!isUnlimited && !isExpired && supabase && user?.id && user.id !== SUPERADMIN_ID) {
     try {
-      const { data: sub } = await supabase
-        .from('user_subscriptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const registry = await getSubscriptionRegistry(supabase);
+      const regItem = registry[user.id] || (user.username ? registry[user.username.toLowerCase()] : null);
+      if (regItem && (!regItem.expires_at || new Date(regItem.expires_at).getTime() > Date.now())) {
+        if (regItem.is_unlimited && regItem.status === 'active') {
+          isUnlimited = true;
+          user.is_unlimited = true;
+          user.subscription_status = 'active';
+          user.subscription_plan_name = regItem.plan_name || 'نامحدود';
+        }
+      }
 
-      if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
-        isUnlimited = true;
-        user.is_unlimited = true;
-        user.subscription_status = 'active';
-        user.subscription_plan_name = sub.plan_name || 'نامحدود';
+      if (!isUnlimited) {
+        const { data: sub } = await supabase
+          .from('user_subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (sub && (!sub.expires_at || new Date(sub.expires_at).getTime() > Date.now())) {
+          isUnlimited = true;
+          user.is_unlimited = true;
+          user.subscription_status = 'active';
+          user.subscription_plan_name = sub.plan_name || 'نامحدود';
+        }
       }
     } catch {}
   }
@@ -196,9 +257,6 @@ async function getUserUsageFromSupabase(
   const todayStartMs = new Date(todayStartIso).getTime();
   const nextResetIso = getTomorrowMidnightIso();
 
-  const effectiveFp = deviceFingerprint || user?.created_device_fingerprint;
-  const effectiveEitaaId = eitaaId || user?.eitaa_id;
-
   let primaryLogs: any[] = [];
   let againLogs: any[] = [];
 
@@ -208,8 +266,6 @@ async function getUserUsageFromSupabase(
       const isValidUuid = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
       if (user?.id && isValidUuid) orFilters.push(`user_id.eq.${user.id}`);
       if (user?.username) orFilters.push(`username.ilike.${user.username}`);
-      if (effectiveFp) orFilters.push(`device_fingerprint.eq.${effectiveFp}`);
-      if (effectiveEitaaId) orFilters.push(`eitaa_id.eq.${effectiveEitaaId}`);
 
       if (orFilters.length > 0) {
         const { data } = await supabase
@@ -576,21 +632,44 @@ async function findUserById(supabase: SupabaseClient | null, env: Env, id: strin
 
   if (supabase) {
     try {
+      const registryPromise = getSubscriptionRegistry(supabase);
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', id)
         .maybeSingle();
 
+      const registry = await registryPromise;
+      const regItem = registry[id] || (data?.username ? registry[data.username.toLowerCase()] : null);
+
       if (!error && data) {
         const userRec = { ...(data as UserRecord) };
         const isExp = !!userRec.subscription_expires_at && new Date(userRec.subscription_expires_at).getTime() <= Date.now();
-        const baseUnlimited = !isExp && (
+        let baseUnlimited = !isExp && (
           userRec.is_unlimited === true ||
           (userRec.is_unlimited as any) === 'true' ||
           (userRec.is_unlimited as any) === 1 ||
           userRec.subscription_status === 'active'
         );
+
+        if (regItem) {
+          const isRegExpired = !!regItem.expires_at && new Date(regItem.expires_at).getTime() <= Date.now();
+          if (!isRegExpired && regItem.is_unlimited && regItem.status === 'active') {
+            baseUnlimited = true;
+            userRec.is_unlimited = true;
+            userRec.subscription_status = 'active';
+            userRec.subscription_plan_name = regItem.plan_name || userRec.subscription_plan_name || 'نامحدود';
+            userRec.subscription_activated_at = regItem.activated_at || userRec.subscription_activated_at;
+            userRec.subscription_expires_at = regItem.expires_at || userRec.subscription_expires_at;
+            userRec.subscription_activated_by = regItem.activated_by || userRec.subscription_activated_by;
+            userRec.subscription_notes = regItem.notes || userRec.subscription_notes;
+          } else if (regItem.is_unlimited === false) {
+            baseUnlimited = false;
+            userRec.is_unlimited = false;
+            userRec.subscription_status = 'free';
+          }
+        }
+
         userRec.is_unlimited = baseUnlimited;
         if (baseUnlimited) {
           userRec.subscription_status = 'active';
@@ -1294,7 +1373,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           const isValidUuid = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
           const safeUserId = isValidUuid ? user.id : null;
 
-          await supabase.from('generation_logs').insert({
+          const logPayload: any = {
             id: crypto.randomUUID(),
             user_id: safeUserId,
             username: user?.username || 'مهمان',
@@ -1304,11 +1383,21 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             style_id: style.id,
             form_id: form.id,
             is_generate_again: false,
+            timestamp: nowIso
+          };
+
+          // Try insert with optional extra metadata first, then fallback to standard schema
+          const fullPayload = {
+            ...logPayload,
             device_fingerprint: deviceFingerprint || null,
             eitaa_id: user?.eitaa_id || null,
-            ip_address: clientIp.slice(0, 64),
-            timestamp: nowIso
-          });
+            ip_address: clientIp.slice(0, 64)
+          };
+
+          const { error: insErr } = await supabase.from('generation_logs').insert(fullPayload);
+          if (insErr) {
+            await supabase.from('generation_logs').insert(logPayload);
+          }
 
           if (user && user.id !== SUPERADMIN_ID && isValidUuid) {
             await supabase.from('users').update({
@@ -1461,7 +1550,8 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           const isValidUuid = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
           const safeUserId = isValidUuid ? user.id : null;
 
-          await supabase.from('generation_logs').insert({
+          const nowIsoAgain = new Date().toISOString();
+          const againPayload: any = {
             id: crypto.randomUUID(),
             user_id: safeUserId,
             username: user?.username || 'مهمان',
@@ -1471,11 +1561,20 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             style_id: style.id,
             form_id: form.id,
             is_generate_again: true,
+            timestamp: nowIsoAgain
+          };
+
+          const fullAgainPayload = {
+            ...againPayload,
             device_fingerprint: deviceFingerprint || null,
             eitaa_id: user?.eitaa_id || null,
-            ip_address: clientIp.slice(0, 64),
-            timestamp: new Date().toISOString()
-          });
+            ip_address: clientIp.slice(0, 64)
+          };
+
+          const { error: insAgainErr } = await supabase.from('generation_logs').insert(fullAgainPayload);
+          if (insAgainErr) {
+            await supabase.from('generation_logs').insert(againPayload);
+          }
         } catch (againErr) {
           console.error('Failed to insert generate-again log:', againErr);
         }
@@ -2068,11 +2167,12 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
             if (!error && dbUsers) {
               const todayMidnightIso = getTodayMidnightIso();
-              const [logsRes, sessRes, genLogsRes, subsRes] = await Promise.all([
+              const [logsRes, sessRes, genLogsRes, subsRes, regData] = await Promise.all([
                 supabase.from('login_logs').select('user_id, username, ip_address, timestamp, success'),
                 supabase.from('sessions').select('user_id, expires_at'),
-                supabase.from('generation_logs').select('user_id, username, eitaa_id, is_generate_again, timestamp').gte('timestamp', todayMidnightIso),
-                supabase.from('user_subscriptions').select('*').eq('status', 'active')
+                supabase.from('generation_logs').select('user_id, username, is_generate_again, timestamp').gte('timestamp', todayMidnightIso),
+                supabase.from('user_subscriptions').select('*').eq('status', 'active'),
+                getSubscriptionRegistry(supabase)
               ]);
 
               const logsData = logsRes.data || [];
@@ -2090,27 +2190,35 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
                 const userTodayLogs = todayGenLogs.filter(l => 
                   (l.user_id && l.user_id === u.id) ||
-                  (l.username && l.username.toLowerCase() === u.username.toLowerCase()) ||
-                  (u.eitaa_id && l.eitaa_id === u.eitaa_id)
+                  (l.username && l.username.toLowerCase() === u.username.toLowerCase())
                 );
                 const primaryToday = userTodayLogs.filter(l => !l.is_generate_again).length;
                 const regenerationsToday = userTodayLogs.filter(l => !!l.is_generate_again).length;
 
                 const isExp = !!u.subscription_expires_at && new Date(u.subscription_expires_at).getTime() <= now;
                 const userSub = subsData.find(s => s.user_id === u.id && (!s.expires_at || new Date(s.expires_at).getTime() > now));
+                const regItem = regData[u.id] || (u.username ? regData[u.username.toLowerCase()] : null);
+                const isRegActive = regItem && (!regItem.expires_at || new Date(regItem.expires_at).getTime() > now) && regItem.is_unlimited && regItem.status === 'active';
+
                 const isUnlimited = u.role === 'admin' || u.id === SUPERADMIN_ID || u.username === 'parsa' || (!isExp && (
                   u.is_unlimited === true ||
                   (u.is_unlimited as any) === 'true' ||
                   (u.is_unlimited as any) === 1 ||
                   u.subscription_status === 'active' ||
-                  !!userSub
+                  !!userSub ||
+                  isRegActive
                 ));
 
                 u.is_unlimited = isUnlimited;
                 if (isUnlimited) {
                   u.subscription_status = 'active';
-                  u.subscription_plan_name = userSub?.plan_name || u.subscription_plan_name || 'نامحدود';
-                  if (userSub) {
+                  u.subscription_plan_name = regItem?.plan_name || userSub?.plan_name || u.subscription_plan_name || 'نامحدود';
+                  if (regItem) {
+                    u.subscription_activated_at = regItem.activated_at || u.subscription_activated_at;
+                    u.subscription_expires_at = regItem.expires_at || u.subscription_expires_at;
+                    u.subscription_activated_by = regItem.activated_by || u.subscription_activated_by;
+                    u.subscription_notes = regItem.notes || u.subscription_notes;
+                  } else if (userSub) {
                     u.subscription_activated_at = userSub.activated_at || userSub.created_at || u.subscription_activated_at;
                     u.subscription_expires_at = userSub.expires_at;
                     u.subscription_activated_by = userSub.activated_by || u.subscription_activated_by;
@@ -2284,6 +2392,34 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         };
 
         if (supabase && targetUserId !== SUPERADMIN_ID) {
+          // 1. Fetch user to obtain exact username and current record
+          let targetUsername = targetUserId;
+          try {
+            const { data: currentTarget } = await supabase
+              .from('users')
+              .select('id, username')
+              .eq('id', targetUserId)
+              .maybeSingle();
+            if (currentTarget?.username) {
+              targetUsername = currentTarget.username;
+            }
+          } catch {}
+
+          // 2. Persist authoritative subscription record to database settings registry
+          await saveSubscriptionRegistryItem(supabase, {
+            userId: targetUserId,
+            username: targetUsername,
+            is_unlimited: isUnlimitedFlag,
+            status: finalStatus,
+            plan_name: finalPlanName,
+            activated_at: isUnlimitedFlag ? now : null,
+            expires_at: expiresAt,
+            activated_by: authedUser.username,
+            notes: finalNotes,
+            updated_at: now
+          });
+
+          // 3. Update users table with graceful column fallbacks
           const updatePayload: any = {
             is_unlimited: isUnlimitedFlag,
             subscription_status: finalStatus,
@@ -2303,7 +2439,6 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             .maybeSingle();
 
           if (error && (error.message?.includes('column') || error.code === '42703')) {
-            console.warn('Supabase users table missing some subscription metadata columns, retrying with core fields:', error.message);
             const corePayload: any = {
               is_unlimited: isUnlimitedFlag,
               subscription_status: finalStatus,
@@ -2337,40 +2472,43 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
             }
           }
 
-          try {
-            // Cancel old active subscriptions to maintain single authoritative active state
-            await supabase
-              .from('user_subscriptions')
-              .update({ status: 'cancelled' })
-              .eq('user_id', targetUserId)
-              .eq('status', 'active');
+          // 4. Update user_subscriptions table if applicable
+          const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId);
+          if (isValidUuid) {
+            try {
+              await supabase
+                .from('user_subscriptions')
+                .update({ status: 'cancelled' })
+                .eq('user_id', targetUserId)
+                .eq('status', 'active');
 
-            if (isUnlimitedFlag) {
-              const { error: insertErr } = await supabase.from('user_subscriptions').insert({
-                id: crypto.randomUUID(),
-                user_id: targetUserId,
-                plan_name: finalPlanName,
-                status: 'active',
-                activated_by: authedUser.username,
-                notes: finalNotes,
-                expires_at: expiresAt,
-                created_at: now
-              });
-              if (insertErr && (insertErr.message?.includes('column') || insertErr.code === '42703')) {
-                await supabase.from('user_subscriptions').insert({
+              if (isUnlimitedFlag) {
+                const { error: insertErr } = await supabase.from('user_subscriptions').insert({
                   id: crypto.randomUUID(),
                   user_id: targetUserId,
                   plan_name: finalPlanName,
                   status: 'active',
+                  activated_by: authedUser.username,
+                  notes: finalNotes,
+                  expires_at: expiresAt,
                   created_at: now
                 });
+                if (insertErr && (insertErr.message?.includes('column') || insertErr.code === '42703')) {
+                  await supabase.from('user_subscriptions').insert({
+                    id: crypto.randomUUID(),
+                    user_id: targetUserId,
+                    plan_name: finalPlanName,
+                    status: 'active',
+                    created_at: now
+                  });
+                }
               }
+            } catch (e) {
+              console.warn('user_subscriptions synchronization skipped:', e);
             }
-          } catch (e) {
-            console.error('Error synchronizing user_subscriptions:', e);
           }
 
-          // Authoritative verification directly from database
+          // 5. Authoritative verification directly from database
           const verifiedUser = await findUserById(supabase, env, targetUserId);
           if (!verifiedUser || Boolean(verifiedUser.is_unlimited) !== isUnlimitedFlag) {
             console.error('Database verification failed after updating subscription:', {
